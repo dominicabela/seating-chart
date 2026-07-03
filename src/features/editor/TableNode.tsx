@@ -222,8 +222,8 @@ function TableCircle({
       )}
       {isCouple ? (
         <>
-          <Heart className="mb-0.5 size-3.5 fill-rose-300 text-rose-300" />
-          <span className="max-w-[80px] truncate px-1 text-center text-[11px] leading-tight font-medium">
+          <Heart className="mb-0.5 size-3.5 shrink-0 fill-rose-300 text-rose-300" />
+          <span className="max-w-[88px] px-1 text-center text-[11px] leading-tight font-medium whitespace-normal">
             {table.label}
           </span>
         </>
