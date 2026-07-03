@@ -16,7 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { tableColor, TABLE_COLORS } from "@/lib/table-colors";
-import { CATEGORY_LABEL } from "@/lib/categories";
+import { CATEGORY_LABEL, CATEGORY_BADGE_CLASS } from "@/lib/categories";
 import type { EditorActions, RemoteTouch } from "./Editor";
 
 type Table = Doc<"tables">;
@@ -467,7 +467,10 @@ function SeatChip({
               {...attributes}
               {...listeners}
               className={cn(
-                "relative z-10 flex size-full touch-none items-center justify-center overflow-hidden rounded-full border bg-card text-[10px] font-semibold text-foreground/80 shadow-xs select-none",
+                "relative z-10 flex size-full touch-none items-center justify-center overflow-hidden rounded-full border text-[10px] font-semibold shadow-xs select-none",
+                guest.category
+                  ? CATEGORY_BADGE_CLASS[guest.category]
+                  : "bg-card text-foreground/80",
                 canEdit && "cursor-grab active:cursor-grabbing",
                 highlight && "z-30",
               )}
