@@ -27,7 +27,7 @@ import {
   CATEGORY_LABEL,
   type Category,
 } from "@/lib/categories";
-import type { EditorActions } from "./Editor";
+import type { EditorActions, RemoteTouch } from "./Editor";
 
 type Guest = Doc<"guests">;
 type Table = Doc<"tables">;
@@ -35,20 +35,31 @@ type Table = Doc<"tables">;
 const ALL = "__all__";
 const UNCATEGORIZED = "__uncategorized__";
 
+type SortBy = "name" | "category" | "table";
+
+const CATEGORY_ORDER = new Map<string, number>(
+  CATEGORIES.map((c, i) => [c.value, i]),
+);
+
 export function Sidebar({
   guests,
   tables,
   canEdit,
   actions,
+  remoteGuestTouch,
+  onHoverGuest,
 }: {
   guests: Guest[];
   tables: Table[];
   canEdit: boolean;
   actions: EditorActions;
+  remoteGuestTouch?: Map<string, RemoteTouch>;
+  onHoverGuest?: (guestId: Id<"guests"> | null) => void;
 }) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
   const [statusFilter, setStatusFilter] = useState<string>(ALL);
+  const [sortBy, setSortBy] = useState<SortBy>("name");
   const [showAdd, setShowAdd] = useState(false);
   const [confirmAutoSeat, setConfirmAutoSeat] = useState(false);
 
@@ -67,6 +78,28 @@ export function Sidebar({
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const byName = (a: Guest, b: Guest) =>
+      `${a.lastName} ${a.firstName}`.localeCompare(
+        `${b.lastName} ${b.firstName}`,
+      );
+    const compare = (a: Guest, b: Guest): number => {
+      if (sortBy === "category") {
+        // Uncategorized last, then plan order, then name.
+        const ai = a.category ? (CATEGORY_ORDER.get(a.category) ?? 99) : 100;
+        const bi = b.category ? (CATEGORY_ORDER.get(b.category) ?? 99) : 100;
+        if (ai !== bi) return ai - bi;
+      } else if (sortBy === "table") {
+        // Unseated last, then by table label (numeric-aware), then name.
+        const al = a.tableId ? (tableLabels.get(a.tableId) ?? "") : null;
+        const bl = b.tableId ? (tableLabels.get(b.tableId) ?? "") : null;
+        if (al === null && bl !== null) return 1;
+        if (al !== null && bl === null) return -1;
+        if (al !== null && bl !== null && al !== bl) {
+          return al.localeCompare(bl, undefined, { numeric: true });
+        }
+      }
+      return byName(a, b);
+    };
     return guests
       .filter((guest) => {
         if (
@@ -87,12 +120,8 @@ export function Sidebar({
         if (statusFilter === "unseated" && guest.tableId) return false;
         return true;
       })
-      .sort((a, b) =>
-        `${a.lastName} ${a.firstName}`.localeCompare(
-          `${b.lastName} ${b.firstName}`,
-        ),
-      );
-  }, [guests, search, categoryFilter, statusFilter]);
+      .sort(compare);
+  }, [guests, search, categoryFilter, statusFilter, sortBy, tableLabels]);
 
   const anySeated = seatedCount > 0;
 
@@ -105,6 +134,11 @@ export function Sidebar({
     { value: ALL, label: "All guests" },
     { value: "seated", label: "Seated" },
     { value: "unseated", label: "Unseated" },
+  ];
+  const sortItems: { value: SortBy; label: string }[] = [
+    { value: "name", label: "Sort · Last name" },
+    { value: "category", label: "Sort · Category" },
+    { value: "table", label: "Sort · Table" },
   ];
 
   return (
@@ -176,6 +210,23 @@ export function Sidebar({
             </SelectContent>
           </Select>
         </div>
+
+        <Select
+          items={sortItems}
+          value={sortBy}
+          onValueChange={(v) => setSortBy(v as SortBy)}
+        >
+          <SelectTrigger size="sm" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {sortItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div
@@ -202,6 +253,8 @@ export function Sidebar({
                 }
                 canEdit={canEdit}
                 actions={actions}
+                remote={remoteGuestTouch?.get(guest._id)}
+                onHover={onHoverGuest}
               />
             ))}
           </ul>
@@ -271,11 +324,15 @@ function GuestRow({
   tableLabel,
   canEdit,
   actions,
+  remote,
+  onHover,
 }: {
   guest: Guest;
   tableLabel: string | null;
   canEdit: boolean;
   actions: EditorActions;
+  remote?: RemoteTouch;
+  onHover?: (guestId: Id<"guests"> | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `row:${guest._id}`,
@@ -297,6 +354,12 @@ function GuestRow({
         "group flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 hover:bg-muted/60",
         isDragging && "opacity-40",
       )}
+      style={
+        remote ? { boxShadow: `inset 0 0 0 1.5px ${remote.color}` } : undefined
+      }
+      title={remote ? `${remote.name} is moving this guest` : undefined}
+      onMouseEnter={() => onHover?.(guest._id)}
+      onMouseLeave={() => onHover?.(null)}
     >
       {canEdit && (
         <span

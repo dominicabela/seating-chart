@@ -16,6 +16,12 @@ export const tableKindValidator = v.union(
   v.literal("couple"),
 );
 
+/** What a collaborator is currently manipulating. */
+export const activityValidator = v.union(
+  v.object({ kind: v.literal("guest"), guestId: v.id("guests") }),
+  v.object({ kind: v.literal("table"), tableId: v.id("tables") }),
+);
+
 export default defineSchema({
   projects: defineTable({
     name: v.string(),
@@ -45,4 +51,16 @@ export default defineSchema({
   })
     .index("by_project", ["projectId"])
     .index("by_table", ["tableId"]),
+
+  presence: defineTable({
+    projectId: v.id("projects"),
+    sessionId: v.string(),
+    name: v.string(),
+    color: v.string(),
+    canEdit: v.boolean(),
+    lastSeen: v.number(),
+    activity: v.optional(activityValidator),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_project_session", ["projectId", "sessionId"]),
 });

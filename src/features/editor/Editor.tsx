@@ -9,11 +9,12 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, Search } from "lucide-react";
 
 import { api } from "../../../convex/_generated/api";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { History } from "@/lib/history";
-import type { Category } from "@/lib/categories";
+import { CATEGORY_LABEL, type Category } from "@/lib/categories";
+import type { Activity, Collaborator } from "@/lib/presence";
 import { TableNode, CELL, NODE, PADDING } from "./TableNode";
 import { Sidebar } from "./Sidebar";
 
@@ -66,6 +68,9 @@ type SwapPrompt = {
   toTable: Table;
 };
 
+/** Who (name + color) is currently touching a given guest/table. */
+export type RemoteTouch = { name: string; color: string };
+
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 1.6;
 const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
@@ -76,12 +81,16 @@ export function Editor({
   tables,
   guests,
   history,
+  collaborators = [],
+  onActivity,
 }: {
   code: string;
   canEdit: boolean;
   tables: Table[];
   guests: Guest[];
   history: History;
+  collaborators?: Collaborator[];
+  onActivity?: (activity: Activity | null) => void;
 }) {
   const assignMut = useMutation(api.guests.assign);
   const restoreMut = useMutation(api.guests.restoreAssignments);
@@ -96,6 +105,39 @@ export function Editor({
 
   const [activeGuest, setActiveGuest] = useState<Guest | null>(null);
   const [swapPrompt, setSwapPrompt] = useState<SwapPrompt | null>(null);
+  const [hoveredGuestId, setHoveredGuestId] = useState<Id<"guests"> | null>(
+    null,
+  );
+  const [seatPrompt, setSeatPrompt] = useState<Table | null>(null);
+
+  // Latest server state, readable from history closures at undo time so we
+  // can detect (and skip) reverts of changes another collaborator made since.
+  const guestsRef = useRef(guests);
+  const tablesRef = useRef(tables);
+  useEffect(() => {
+    guestsRef.current = guests;
+    tablesRef.current = tables;
+  }, [guests, tables]);
+
+  const remoteGuestTouch = useMemo(() => {
+    const map = new Map<string, RemoteTouch>();
+    for (const c of collaborators) {
+      if (c.activity?.kind === "guest") {
+        map.set(c.activity.guestId, { name: c.name, color: c.color });
+      }
+    }
+    return map;
+  }, [collaborators]);
+
+  const remoteTableTouch = useMemo(() => {
+    const map = new Map<string, RemoteTouch>();
+    for (const c of collaborators) {
+      if (c.activity?.kind === "table") {
+        map.set(c.activity.tableId, { name: c.name, color: c.color });
+      }
+    }
+    return map;
+  }, [collaborators]);
 
   const [scale, setScale] = useState(1);
   const scaleRef = useRef(scale);
@@ -147,8 +189,6 @@ export function Editor({
     };
     el.addEventListener("wheel", handler, { passive: false });
     return () => el.removeEventListener("wheel", handler);
-    // zoomTo is stable enough via refs; bind once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const guestsByTable = useMemo(() => {
@@ -187,6 +227,10 @@ export function Editor({
           }
         },
         async () => {
+          // Skip if a collaborator has moved this guest since; undo should
+          // only revert this session's own work.
+          const current = guestsRef.current.find((g) => g._id === guest._id);
+          if (!current || (current.tableId ?? null) !== tableId) return;
           await restoreMut({
             code,
             assignments: [{ guestId: guest._id, tableId: prev }],
@@ -209,6 +253,12 @@ export function Editor({
           });
         },
         async () => {
+          // Skip if either guest was moved again by someone else since.
+          const a = guestsRef.current.find((g) => g._id === guest._id);
+          const b = guestsRef.current.find((g) => g._id === swapWith._id);
+          if (!a || !b) return;
+          if ((a.tableId ?? null) !== toTableId) return;
+          if ((b.tableId ?? null) !== prevGuest) return;
           await restoreMut({
             code,
             assignments: [
@@ -261,6 +311,9 @@ export function Editor({
           await setCategoryMut({ code, guestId: guest._id, category });
         },
         async () => {
+          // Skip if someone else recategorized this guest since.
+          const current = guestsRef.current.find((g) => g._id === guest._id);
+          if (!current || (current.category ?? null) !== category) return;
           await setCategoryMut({ code, guestId: guest._id, category: prev });
         },
       );
@@ -275,6 +328,10 @@ export function Editor({
           await moveTableMut({ code, tableId: table._id, gridX, gridY });
         },
         async () => {
+          // Skip if someone else moved this table since.
+          const current = tablesRef.current.find((t) => t._id === table._id);
+          if (!current || current.gridX !== gridX || current.gridY !== gridY)
+            return;
           await moveTableMut({
             code,
             tableId: table._id,
@@ -297,6 +354,12 @@ export function Editor({
           await updateTableMut({ code, tableId: table._id, ...patch });
         },
         async () => {
+          // Skip if someone else edited the same fields since.
+          const current = tablesRef.current.find((t) => t._id === table._id);
+          if (!current) return;
+          for (const key of Object.keys(patch) as (keyof typeof patch)[]) {
+            if (current[key] !== patch[key]) return;
+          }
           await updateTableMut({ code, tableId: table._id, ...prev });
         },
       );
@@ -366,12 +429,21 @@ export function Editor({
     if (data?.type === "guest") {
       const guest = guests.find((g) => g._id === data.guestId);
       setActiveGuest(guest ?? null);
+      if (guest) onActivity?.({ kind: "guest", guestId: guest._id });
+    } else if (data?.type === "table") {
+      onActivity?.({ kind: "table", tableId: data.tableId as Table["_id"] });
     }
+  };
+
+  const onDragCancel = () => {
+    setActiveGuest(null);
+    onActivity?.(null);
   };
 
   const onDragEnd = (event: DragEndEvent) => {
     const data = event.active.data.current;
     setActiveGuest(null);
+    onActivity?.(null);
 
     if (data?.type === "table") {
       const table = tables.find((t) => t._id === data.tableId);
@@ -439,6 +511,7 @@ export function Editor({
       sensors={sensors}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onDragCancel={onDragCancel}
     >
       <div className="flex flex-1 overflow-hidden">
         <div className="relative flex-1">
@@ -476,6 +549,10 @@ export function Editor({
                     canEdit={canEdit}
                     scale={scale}
                     actions={actions}
+                    remoteTouch={remoteTableTouch.get(table._id)}
+                    remoteGuestTouch={remoteGuestTouch}
+                    hoveredGuestId={hoveredGuestId}
+                    onSeatGuest={setSeatPrompt}
                   />
                 ))}
               </div>
@@ -529,6 +606,8 @@ export function Editor({
           tables={tables}
           canEdit={canEdit}
           actions={actions}
+          remoteGuestTouch={remoteGuestTouch}
+          onHoverGuest={setHoveredGuestId}
         />
       </div>
 
@@ -539,6 +618,18 @@ export function Editor({
           </div>
         )}
       </DragOverlay>
+
+      {seatPrompt && (
+        <SeatGuestDialog
+          table={seatPrompt}
+          unseated={guests.filter((g) => !g.tableId)}
+          onClose={() => setSeatPrompt(null)}
+          onPick={(guest) => {
+            actions.assignGuest(guest, seatPrompt._id);
+            setSeatPrompt(null);
+          }}
+        />
+      )}
 
       {swapPrompt && (
         <SwapDialog
@@ -556,6 +647,94 @@ export function Editor({
         />
       )}
     </DndContext>
+  );
+}
+
+function SeatGuestDialog({
+  table,
+  unseated,
+  onClose,
+  onPick,
+}: {
+  table: Table;
+  unseated: Guest[];
+  onClose: () => void;
+  onPick: (guest: Guest) => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return unseated
+      .filter(
+        (g) =>
+          !query ||
+          `${g.firstName} ${g.lastName}`.toLowerCase().includes(query),
+      )
+      .sort((a, b) =>
+        `${a.lastName} ${a.firstName}`.localeCompare(
+          `${b.lastName} ${b.firstName}`,
+        ),
+      );
+  }, [unseated, search]);
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Seat a guest at {table.label}</DialogTitle>
+          <DialogDescription>
+            {unseated.length === 0
+              ? "Everyone already has a seat."
+              : "Pick an unseated guest for this spot."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {unseated.length > 0 && (
+          <>
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                autoFocus
+                placeholder="Search unseated guests"
+                className="pl-8"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && filtered.length === 1) {
+                    onPick(filtered[0]);
+                  }
+                }}
+              />
+            </div>
+            <ul className="-mx-2 max-h-64 overflow-y-auto">
+              {filtered.map((guest) => (
+                <li key={guest._id}>
+                  <button
+                    onClick={() => onPick(guest)}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  >
+                    <span className="truncate">
+                      {guest.firstName} {guest.lastName}
+                    </span>
+                    {guest.category && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {CATEGORY_LABEL[guest.category]}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+              {filtered.length === 0 && (
+                <li className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  No unseated guests match “{search}”
+                </li>
+              )}
+            </ul>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { Heart, Minus, Plus, Trash2, X } from "lucide-react";
 
@@ -6,15 +6,18 @@ import type { Doc } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { tableColor, TABLE_COLORS } from "@/lib/table-colors";
 import { CATEGORY_LABEL } from "@/lib/categories";
-import type { EditorActions } from "./Editor";
+import type { EditorActions, RemoteTouch } from "./Editor";
 
 type Table = Doc<"tables">;
 type Guest = Doc<"guests">;
@@ -35,12 +38,20 @@ export function TableNode({
   canEdit,
   scale = 1,
   actions,
+  remoteTouch,
+  remoteGuestTouch,
+  hoveredGuestId,
+  onSeatGuest,
 }: {
   table: Table;
   guests: Guest[];
   canEdit: boolean;
   scale?: number;
   actions: EditorActions;
+  remoteTouch?: RemoteTouch;
+  remoteGuestTouch?: Map<string, RemoteTouch>;
+  hoveredGuestId?: string | null;
+  onSeatGuest?: (table: Table) => void;
 }) {
   const isCouple = table.kind === "couple";
   const color = tableColor(isCouple ? "gold" : table.color);
@@ -94,8 +105,25 @@ export function TableNode({
               y={y}
               labelOutside={y < NODE / 2}
               canEdit={canEdit}
+              remote={remoteGuestTouch?.get(guest._id)}
+              highlight={guest._id === hoveredGuestId}
               onRemove={() => actions.assignGuest(guest, null)}
             />
+          ) : canEdit ? (
+            <button
+              key={`empty-${i}`}
+              onClick={() => onSeatGuest?.(table)}
+              title="Seat a guest"
+              className="absolute flex items-center justify-center rounded-full border border-dashed border-border/80 bg-background/50 text-muted-foreground/50 transition-colors hover:border-primary hover:bg-primary/10 hover:text-primary"
+              style={{
+                left: x - SEAT / 2,
+                top: y - SEAT / 2,
+                width: SEAT,
+                height: SEAT,
+              }}
+            >
+              <Plus className="size-3.5" />
+            </button>
           ) : (
             <div
               key={`empty-${i}`}
@@ -120,6 +148,7 @@ export function TableNode({
         actions={actions}
         dragProps={{ ...attributes, ...listeners }}
         setDragRef={setDragRef}
+        remote={remoteTouch}
       />
     </div>
   );
@@ -135,6 +164,7 @@ function TableCircle({
   actions,
   dragProps,
   setDragRef,
+  remote,
 }: {
   table: Table;
   guests: Guest[];
@@ -145,6 +175,7 @@ function TableCircle({
   actions: EditorActions;
   dragProps: Record<string, unknown>;
   setDragRef: (el: HTMLElement | null) => void;
+  remote?: RemoteTouch;
 }) {
   const isCouple = table.kind === "couple";
   // Suppress the click that fires right after a drag so the settings
@@ -167,7 +198,7 @@ function TableCircle({
       }}
       className={cn(
         "absolute flex touch-none flex-col items-center justify-center rounded-full shadow-xs transition-shadow select-none",
-        canEdit && "cursor-grab active:cursor-grabbing",
+        canEdit ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
         isOver && "shadow-md ring-2 ring-primary",
       )}
       style={{
@@ -177,8 +208,17 @@ function TableCircle({
         height: CIRCLE,
         background: color.bg,
         border: `1.5px solid ${color.border}`,
+        ...(remote && { boxShadow: `0 0 0 2px ${remote.color}` }),
       }}
     >
+      {remote && (
+        <span
+          className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 text-[9px] font-medium whitespace-nowrap text-white"
+          style={{ background: remote.color }}
+        >
+          {remote.name}
+        </span>
+      )}
       {isCouple ? (
         <>
           <Heart className="mb-0.5 size-3.5 fill-rose-300 text-rose-300" />
@@ -206,27 +246,42 @@ function TableCircle({
     </div>
   );
 
-  if (!canEdit) return circle;
-
   return (
-    <Popover>
-      <PopoverTrigger render={circle} />
-      <TableSettings table={table} guests={guests} actions={actions} />
-    </Popover>
+    <Dialog>
+      <DialogTrigger render={circle} />
+      <TableDialog
+        table={table}
+        guests={guests}
+        actions={actions}
+        canEdit={canEdit}
+      />
+    </Dialog>
   );
 }
 
-function TableSettings({
+function TableDialog({
   table,
   guests,
   actions,
+  canEdit,
 }: {
   table: Table;
   guests: Guest[];
   actions: EditorActions;
+  canEdit: boolean;
 }) {
   const [label, setLabel] = useState(table.label);
   const isCouple = table.kind === "couple";
+
+  const sortedGuests = useMemo(
+    () =>
+      [...guests].sort((a, b) =>
+        `${a.lastName} ${a.firstName}`.localeCompare(
+          `${b.lastName} ${b.firstName}`,
+        ),
+      ),
+    [guests],
+  );
 
   const commitLabel = () => {
     const trimmed = label.trim();
@@ -235,76 +290,135 @@ function TableSettings({
     }
   };
 
+  const emptySeats = isCouple ? 0 : Math.max(0, table.capacity - guests.length);
+
   return (
-    <PopoverContent className="w-60" sideOffset={8}>
-      <Input
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-        onBlur={commitLabel}
-        onKeyDown={(e) => e.key === "Enter" && commitLabel()}
-      />
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>{table.label}</DialogTitle>
+        <DialogDescription>
+          {isCouple
+            ? `${guests.length} seated`
+            : `${guests.length}/${table.capacity} seated`}
+          {emptySeats > 0 &&
+            ` · ${emptySeats} empty ${emptySeats === 1 ? "seat" : "seats"}`}
+        </DialogDescription>
+      </DialogHeader>
 
-      {!isCouple && (
-        <>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Seats</span>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="icon-xs"
-                disabled={table.capacity <= Math.max(1, guests.length)}
-                onClick={() =>
-                  actions.updateTable(table, { capacity: table.capacity - 1 })
-                }
-              >
-                <Minus />
-              </Button>
-              <span className="w-6 text-center text-sm tabular-nums">
-                {table.capacity}
-              </span>
-              <Button
-                variant="outline"
-                size="icon-xs"
-                disabled={table.capacity >= 16}
-                onClick={() =>
-                  actions.updateTable(table, { capacity: table.capacity + 1 })
-                }
-              >
-                <Plus />
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <span className="text-xs text-muted-foreground">Color</span>
-            <div className="mt-1.5 flex gap-1.5">
-              {TABLE_COLORS.map((c) => (
-                <button
-                  key={c.key}
-                  title={c.label}
-                  onClick={() => actions.updateTable(table, { color: c.key })}
-                  className={cn(
-                    "size-6 rounded-full border transition-transform hover:scale-110",
-                    table.color === c.key &&
-                      "ring-2 ring-primary ring-offset-1",
-                  )}
-                  style={{ background: c.swatch, borderColor: c.border }}
-                />
-              ))}
-            </div>
-          </div>
-
-          <Button
-            variant="destructive"
-            size="sm"
-            className="mt-1 w-full"
-            onClick={() => actions.removeTable(table)}
+      <ul className="-mx-1 max-h-64 overflow-y-auto">
+        {sortedGuests.map((guest) => (
+          <li
+            key={guest._id}
+            className="group flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/60"
           >
-            <Trash2 data-icon="inline-start" /> Remove table
-          </Button>
-        </>
+            <span className="min-w-0 truncate text-sm">
+              {guest.firstName} {guest.lastName}
+            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              {guest.category && (
+                <span className="text-[10px] text-muted-foreground">
+                  {CATEGORY_LABEL[guest.category]}
+                </span>
+              )}
+              {canEdit && (
+                <button
+                  onClick={() => actions.assignGuest(guest, null)}
+                  className="hidden text-muted-foreground/60 group-hover:block hover:text-destructive"
+                  title="Remove from table"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+        {sortedGuests.length === 0 && (
+          <li className="px-2 py-6 text-center text-sm text-muted-foreground">
+            No guests seated yet
+          </li>
+        )}
+      </ul>
+
+      {canEdit && (
+        <div className="flex flex-col gap-3 border-t pt-3">
+        <div>
+          <span className="text-xs text-muted-foreground">Table name</span>
+          <Input
+            className="mt-1"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(e) => e.key === "Enter" && commitLabel()}
+          />
+        </div>
+
+        {!isCouple && (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Seats</span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon-xs"
+                  disabled={table.capacity <= Math.max(1, guests.length)}
+                  onClick={() =>
+                    actions.updateTable(table, {
+                      capacity: table.capacity - 1,
+                    })
+                  }
+                >
+                  <Minus />
+                </Button>
+                <span className="w-6 text-center text-sm tabular-nums">
+                  {table.capacity}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon-xs"
+                  disabled={table.capacity >= 16}
+                  onClick={() =>
+                    actions.updateTable(table, {
+                      capacity: table.capacity + 1,
+                    })
+                  }
+                >
+                  <Plus />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Color</span>
+              <div className="flex gap-1.5">
+                {TABLE_COLORS.map((c) => (
+                  <button
+                    key={c.key}
+                    title={c.label}
+                    onClick={() => actions.updateTable(table, { color: c.key })}
+                    className={cn(
+                      "size-6 rounded-full border transition-transform hover:scale-110",
+                      table.color === c.key &&
+                        "ring-2 ring-primary ring-offset-1",
+                    )}
+                    style={{ background: c.swatch, borderColor: c.border }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              onClick={() => actions.removeTable(table)}
+            >
+              <Trash2 data-icon="inline-start" /> Remove table
+            </Button>
+          </>
+        )}
+        </div>
       )}
-    </PopoverContent>
+    </DialogContent>
   );
 }
 
@@ -314,6 +428,8 @@ function SeatChip({
   y,
   labelOutside,
   canEdit,
+  remote,
+  highlight,
   onRemove,
 }: {
   guest: Guest;
@@ -321,6 +437,8 @@ function SeatChip({
   y: number;
   labelOutside: boolean;
   canEdit: boolean;
+  remote?: RemoteTouch;
+  highlight: boolean;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -334,8 +452,10 @@ function SeatChip({
     "?";
 
   return (
+    // No z-index on the root: the avatar (z-10) and name label (z-20) layer
+    // within the table node, so labels always paint above neighboring avatars.
     <div
-      className={cn("group absolute z-10", isDragging && "opacity-40")}
+      className={cn("group absolute", isDragging && "opacity-40")}
       style={{ left: x - SEAT / 2, top: y - SEAT / 2, width: SEAT, height: SEAT }}
     >
       <Tooltip>
@@ -346,9 +466,17 @@ function SeatChip({
               {...attributes}
               {...listeners}
               className={cn(
-                "flex size-full touch-none items-center justify-center rounded-full border bg-card text-[10px] font-semibold text-foreground/80 shadow-xs select-none",
+                "relative z-10 flex size-full touch-none items-center justify-center rounded-full border bg-card text-[10px] font-semibold text-foreground/80 shadow-xs select-none",
                 canEdit && "cursor-grab active:cursor-grabbing",
+                highlight && "z-30",
               )}
+              style={
+                highlight
+                  ? { boxShadow: "0 0 0 2px #39ff14, 0 0 8px #39ff14" }
+                  : remote
+                    ? { boxShadow: `0 0 0 2px ${remote.color}` }
+                    : undefined
+              }
             />
           }
         >
@@ -361,16 +489,18 @@ function SeatChip({
       </Tooltip>
       <span
         className={cn(
-          "pointer-events-none absolute left-1/2 w-16 -translate-x-1/2 truncate text-center text-[9px] leading-tight text-muted-foreground",
+          "pointer-events-none absolute left-1/2 z-20 w-16 -translate-x-1/2 truncate text-center text-[9px] leading-tight",
           labelOutside ? "bottom-full mb-0.5" : "top-full mt-0.5",
+          highlight ? "z-30 font-semibold" : "text-muted-foreground",
         )}
+        style={highlight ? { color: "#39ff14" } : undefined}
       >
         {guest.firstName}
       </span>
       {canEdit && (
         <button
           onClick={onRemove}
-          className="absolute -top-1.5 -right-1.5 z-20 hidden size-4 items-center justify-center rounded-full bg-foreground text-background shadow-sm group-hover:flex"
+          className="absolute -top-1.5 -right-1.5 z-40 hidden size-4 items-center justify-center rounded-full bg-foreground text-background shadow-sm group-hover:flex"
           title="Remove from table"
         >
           <X className="size-2.5" />

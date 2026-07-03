@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import {
   Check,
   Copy,
   Eye,
+  Link2,
   Loader2,
   Redo2,
   Settings2,
@@ -24,6 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useHistory, useHistoryShortcuts } from "@/lib/history";
+import { usePresence, type Collaborator } from "@/lib/presence";
 import { ImportStep } from "@/features/ImportStep";
 import { CategorizeStep } from "@/features/CategorizeStep";
 import { Editor } from "@/features/editor/Editor";
@@ -38,6 +40,7 @@ export function Workspace() {
 
   const [stepOverride, setStepOverride] = useState<Step | null>(null);
   const history = useHistory();
+  const presence = usePresence(code, !!project);
 
   const derivedStep: Step = useMemo(() => {
     if (!guests || guests.length === 0) return "import";
@@ -49,11 +52,11 @@ export function Workspace() {
 
   // Once the editor is reached, pin it so later uncategorized additions from
   // the sidebar don't yank the user back into the categorize flow.
-  useEffect(() => {
-    if (stepOverride === null && derivedStep === "editor") {
-      setStepOverride("editor");
-    }
-  }, [stepOverride, derivedStep]);
+  // (Render-phase state adjustment, per React's "adjusting state when a prop
+  // changes" pattern.)
+  if (stepOverride === null && derivedStep === "editor") {
+    setStepOverride("editor");
+  }
 
   if (project === undefined) {
     return (
@@ -92,6 +95,7 @@ export function Workspace() {
         history={history}
         showHistory={step === "editor" && canEdit}
         hasGuests={(guests?.length ?? 0) > 0}
+        collaborators={presence.others}
       />
       {!loaded ? (
         <div className="flex flex-1 items-center justify-center">
@@ -116,6 +120,8 @@ export function Workspace() {
           tables={tables}
           guests={guests}
           history={history}
+          collaborators={presence.others}
+          onActivity={presence.setActivity}
         />
       )}
     </div>
@@ -130,6 +136,7 @@ function WorkspaceHeader({
   history,
   showHistory,
   hasGuests,
+  collaborators,
 }: {
   code: string;
   project: {
@@ -143,6 +150,7 @@ function WorkspaceHeader({
   history: ReturnType<typeof useHistory>;
   showHistory: boolean;
   hasGuests: boolean;
+  collaborators: Collaborator[];
 }) {
   useHistoryShortcuts(history, showHistory);
 
@@ -194,6 +202,35 @@ function WorkspaceHeader({
       )}
 
       <div className="ml-auto flex items-center gap-1.5">
+        {collaborators.length > 0 && (
+          <div className="mr-1 flex items-center -space-x-1.5">
+            {collaborators.slice(0, 5).map((c) => (
+              <Tooltip key={c.sessionId}>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="flex size-6 items-center justify-center rounded-full text-[10px] font-semibold text-white ring-2 ring-background"
+                      style={{ background: c.color }}
+                    />
+                  }
+                >
+                  {c.name
+                    .split(" ")
+                    .map((w) => w.charAt(0))
+                    .join("")}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {c.name} · {c.canEdit ? "editing" : "viewing"}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+            {collaborators.length > 5 && (
+              <span className="flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground ring-2 ring-background">
+                +{collaborators.length - 5}
+              </span>
+            )}
+          </div>
+        )}
         {showHistory && (
           <>
             <Tooltip>
@@ -300,26 +337,61 @@ function SharePopover({
 }
 
 function CodeRow({ label, code }: { label: string; code: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"code" | "link" | null>(null);
+  const link = `${window.location.origin}/p/${code}`;
+
+  const copy = (kind: "code" | "link") => {
+    void navigator.clipboard.writeText(kind === "code" ? code : link);
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 1500);
+  };
+
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2">
-      <div>
+    <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+      <div className="min-w-0">
         <div className="text-[11px] text-muted-foreground">{label}</div>
         <div className="font-mono text-sm font-medium tracking-[0.2em]">
           {code}
         </div>
       </div>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => {
-          void navigator.clipboard.writeText(code);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        {copied ? <Check className="text-emerald-600" /> : <Copy />}
-      </Button>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => copy("code")}
+              />
+            }
+          >
+            {copied === "code" ? (
+              <Check className="text-emerald-600" />
+            ) : (
+              <Copy />
+            )}
+          </TooltipTrigger>
+          <TooltipContent>Copy code</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => copy("link")}
+              />
+            }
+          >
+            {copied === "link" ? (
+              <Check className="text-emerald-600" />
+            ) : (
+              <Link2 />
+            )}
+          </TooltipTrigger>
+          <TooltipContent>Copy link</TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 }

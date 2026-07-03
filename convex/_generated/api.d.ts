@@ -10,6 +10,7 @@
 
 import type * as guests from "../guests.js";
 import type * as lib_access from "../lib/access.js";
+import type * as presence from "../presence.js";
 import type * as projects from "../projects.js";
 import type * as tables from "../tables.js";
 
@@ -22,6 +23,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   guests: typeof guests;
   "lib/access": typeof lib_access;
+  presence: typeof presence;
   projects: typeof projects;
   tables: typeof tables;
 }>;
