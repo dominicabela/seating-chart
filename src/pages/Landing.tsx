@@ -1,43 +1,43 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useMutation } from "convex/react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { useMutation } from "convex/react"
+import { ArrowRight, Loader2 } from "lucide-react"
 
-import { api } from "../../convex/_generated/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { api } from "../../convex/_generated/api"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 
 export function Landing() {
-  const navigate = useNavigate();
-  const createProject = useMutation(api.projects.create);
+  const navigate = useNavigate()
+  const createProject = useMutation(api.projects.create)
 
-  const [name, setName] = useState("");
-  const [numTables, setNumTables] = useState("10");
-  const [capacity, setCapacity] = useState("8");
-  const [creating, setCreating] = useState(false);
-  const [openCode, setOpenCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState("")
+  const [numTables, setNumTables] = useState("10")
+  const [capacity, setCapacity] = useState("8")
+  const [creating, setCreating] = useState(false)
+  const [openCode, setOpenCode] = useState("")
+  const [error, setError] = useState<string | null>(null)
 
   const handleCreate = async () => {
-    setError(null);
-    setCreating(true);
+    setError(null)
+    setCreating(true)
     try {
       const { editCode } = await createProject({
         name,
         numTables: Number(numTables) || 10,
         defaultCapacity: Number(capacity) || 8,
-      });
-      navigate(`/p/${editCode}`);
+      })
+      navigate(`/p/${editCode}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-      setCreating(false);
+      setError(e instanceof Error ? e.message : "Something went wrong")
+      setCreating(false)
     }
-  };
+  }
 
   const handleOpen = () => {
-    const code = openCode.trim().toUpperCase();
-    if (code.length === 6) navigate(`/p/${code}`);
-  };
+    const code = openCode.trim().toUpperCase()
+    if (code.length === 6) navigate(`/p/${code}`)
+  }
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-background px-6">
@@ -56,7 +56,7 @@ export function Landing() {
           <h2 className="mb-4 text-sm font-medium">New seating chart</h2>
           <div className="flex flex-col gap-3">
             <Input
-              placeholder="Wedding name (e.g. Emma & Dominic)"
+              placeholder="Wedding name"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -110,7 +110,7 @@ export function Landing() {
               value={openCode}
               onChange={(e) =>
                 setOpenCode(
-                  e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase(),
+                  e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase()
                 )
               }
               onKeyDown={(e) => e.key === "Enter" && handleOpen()}
@@ -126,5 +126,5 @@ export function Landing() {
         </div>
       </div>
     </div>
-  );
+  )
 }
