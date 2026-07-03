@@ -23,14 +23,15 @@ type Table = Doc<"tables">;
 type Guest = Doc<"guests">;
 
 /** Grid cell size in px; tables snap to cells. */
-export const CELL = 100;
+export const CELL = 120;
 /** Square footprint of a table node in px. */
-export const NODE = 180;
+export const NODE = 220;
 /** Canvas inset matching table positioning. */
-export const PADDING = 24;
-const CIRCLE = 100;
-const SEAT = 32;
-const SEAT_RADIUS = CIRCLE / 2 + 20;
+export const PADDING = 32;
+const CIRCLE = 112;
+const SEAT = 34;
+/** Distance from table center to each seat center. */
+const SEAT_RADIUS = CIRCLE / 2 + 32;
 
 export function TableNode({
   table,

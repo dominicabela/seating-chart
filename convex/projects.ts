@@ -23,9 +23,15 @@ async function generateUniqueCode(ctx: MutationCtx): Promise<string> {
   throw new Error("Could not generate a unique code");
 }
 
+/** Grid steps between table centers (multiply by CELL for px spacing). */
+const GRID_STEP = 3;
+
 /** Lay out regular tables in rows of 4, leaving row 0 for the couple table. */
 export function gridPositionForIndex(i: number): { gridX: number; gridY: number } {
-  return { gridX: (i % 4) * 2, gridY: 2 + Math.floor(i / 4) * 2 };
+  return {
+    gridX: (i % 4) * GRID_STEP,
+    gridY: GRID_STEP + Math.floor(i / 4) * GRID_STEP,
+  };
 }
 
 export const create = mutation({

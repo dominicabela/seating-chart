@@ -109,6 +109,7 @@ export function Editor({
     null,
   );
   const [seatPrompt, setSeatPrompt] = useState<Table | null>(null);
+  const [draggingTable, setDraggingTable] = useState(false);
 
   // Latest server state, readable from history closures at undo time so we
   // can detect (and skip) reverts of changes another collaborator made since.
@@ -431,18 +432,21 @@ export function Editor({
       setActiveGuest(guest ?? null);
       if (guest) onActivity?.({ kind: "guest", guestId: guest._id });
     } else if (data?.type === "table") {
+      setDraggingTable(true);
       onActivity?.({ kind: "table", tableId: data.tableId as Table["_id"] });
     }
   };
 
   const onDragCancel = () => {
     setActiveGuest(null);
+    setDraggingTable(false);
     onActivity?.(null);
   };
 
   const onDragEnd = (event: DragEndEvent) => {
     const data = event.active.data.current;
     setActiveGuest(null);
+    setDraggingTable(false);
     onActivity?.(null);
 
     if (data?.type === "table") {
@@ -531,14 +535,15 @@ export function Editor({
                   height: canvasSize.height,
                   transform: `scale(${scale})`,
                   transformOrigin: "0 0",
-                  backgroundImage: `
-                    linear-gradient(to right, color-mix(in oklch, var(--border) 35%, transparent) 1px, transparent 1px),
-                    linear-gradient(to bottom, color-mix(in oklch, var(--border) 35%, transparent) 1px, transparent 1px)
-                  `,
-                  backgroundSize: `${CELL}px ${CELL}px`,
-                  // Offset so each table circle centers within a grid cell rather
-                  // than straddling a grid line (node is wider than a cell).
-                  backgroundPosition: `${PADDING + (NODE - CELL) / 2}px ${PADDING + (NODE - CELL) / 2}px`,
+                  ...(draggingTable && {
+                    backgroundImage: `
+                      linear-gradient(to right, color-mix(in oklch, var(--border) 35%, transparent) 1px, transparent 1px),
+                      linear-gradient(to bottom, color-mix(in oklch, var(--border) 35%, transparent) 1px, transparent 1px)
+                    `,
+                    backgroundSize: `${CELL}px ${CELL}px`,
+                    // Offset so each table circle centers within a grid cell.
+                    backgroundPosition: `${PADDING + (NODE - CELL) / 2}px ${PADDING + (NODE - CELL) / 2}px`,
+                  }),
                 }}
               >
                 {sortedTables.map((table) => (
@@ -805,8 +810,9 @@ function SwapDialog({
 
 function findFreeCell(tables: Table[]): { x: number; y: number } {
   const occupied = new Set(tables.map((t) => `${t.gridX},${t.gridY}`));
-  for (let y = 0; y < 100; y += 2) {
-    for (let x = 0; x < 8; x += 2) {
+  const step = 3;
+  for (let y = 0; y < 100; y += step) {
+    for (let x = 0; x < 12; x += step) {
       if (!occupied.has(`${x},${y}`)) return { x, y };
     }
   }
