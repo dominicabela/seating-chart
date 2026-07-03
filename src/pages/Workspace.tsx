@@ -154,14 +154,24 @@ function WorkspaceHeader({
 }) {
   useHistoryShortcuts(history, showHistory);
 
-  const steps: { key: Step; label: string; disabled?: boolean }[] = [
-    { key: "import", label: "1 · Import" },
-    { key: "categorize", label: "2 · Categorize", disabled: !hasGuests },
-    { key: "editor", label: "3 · Seating", disabled: !hasGuests },
+  const steps: {
+    key: Step;
+    label: string;
+    short: string;
+    disabled?: boolean;
+  }[] = [
+    { key: "import", label: "1 · Import", short: "Import" },
+    {
+      key: "categorize",
+      label: "2 · Categorize",
+      short: "Categorize",
+      disabled: !hasGuests,
+    },
+    { key: "editor", label: "3 · Seating", short: "Seating", disabled: !hasGuests },
   ];
 
   return (
-    <header className="flex h-13 shrink-0 items-center gap-3 border-b bg-card/50 px-4">
+    <header className="flex h-13 shrink-0 items-center gap-2 border-b bg-card/50 px-3 sm:gap-3 sm:px-4">
       <Link
         to="/"
         className="text-lg text-muted-foreground transition-colors hover:text-foreground"
@@ -181,21 +191,22 @@ function WorkspaceHeader({
       </div>
 
       {project.canEdit && (
-        <nav className="ml-4 hidden items-center gap-1 sm:flex">
+        <nav className="ml-4 hidden min-w-0 items-center gap-1 overflow-x-auto sm:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {steps.map((s) => (
             <button
               key={s.key}
               disabled={s.disabled}
               onClick={() => onStepChange(s.key)}
               className={cn(
-                "rounded-full px-3 py-1 text-xs transition-colors",
+                "shrink-0 rounded-full px-2.5 py-1 text-xs transition-colors sm:px-3",
                 step === s.key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 s.disabled && "pointer-events-none opacity-40",
               )}
             >
-              {s.label}
+              <span className="sm:hidden">{s.short}</span>
+              <span className="hidden sm:inline">{s.label}</span>
             </button>
           ))}
         </nav>
@@ -318,7 +329,8 @@ function SharePopover({
   return (
     <Popover>
       <PopoverTrigger render={<Button variant="outline" size="sm" />}>
-        <Share2 data-icon="inline-start" /> Share
+        <Share2 />
+        <span className="hidden sm:inline">Share</span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72">
         <p className="text-xs text-muted-foreground">

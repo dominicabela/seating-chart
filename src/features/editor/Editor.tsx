@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useMemo, useRef, useState } from "react"
+import { useMutation } from "convex/react"
 import {
   DndContext,
   DragOverlay,
@@ -8,13 +8,13 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-} from "@dnd-kit/core";
-import { Minus, Plus, Search } from "lucide-react";
+} from "@dnd-kit/core"
+import { Minus, Plus, Search, Users } from "lucide-react"
 
-import { api } from "../../../convex/_generated/api";
-import type { Doc, Id } from "../../../convex/_generated/dataModel";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { api } from "../../../convex/_generated/api"
+import type { Doc, Id } from "../../../convex/_generated/dataModel"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -22,59 +22,55 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import type { History } from "@/lib/history";
-import { CATEGORY_LABEL, type Category } from "@/lib/categories";
-import type { Activity, Collaborator } from "@/lib/presence";
-import { TableNode, CELL, NODE, PADDING } from "./TableNode";
-import { Sidebar } from "./Sidebar";
+} from "@/components/ui/select"
+import type { History } from "@/lib/history"
+import { CATEGORY_LABEL, type Category } from "@/lib/categories"
+import type { Activity, Collaborator } from "@/lib/presence"
+import { TableNode, CELL, NODE, PADDING } from "./TableNode"
+import { Sidebar } from "./Sidebar"
 
-type Table = Doc<"tables">;
-type Guest = Doc<"guests">;
+type Table = Doc<"tables">
+type Guest = Doc<"guests">
 
 export type EditorActions = {
-  assignGuest: (guest: Guest, tableId: Id<"tables"> | null) => void;
-  swapGuests: (
-    guest: Guest,
-    swapWith: Guest,
-    toTableId: Id<"tables">,
-  ) => void;
+  assignGuest: (guest: Guest, tableId: Id<"tables"> | null) => void
+  swapGuests: (guest: Guest, swapWith: Guest, toTableId: Id<"tables">) => void
   addGuest: (fields: {
-    firstName: string;
-    lastName: string;
-    category?: Category;
-  }) => void;
-  removeGuest: (guest: Guest) => void;
-  setGuestCategory: (guest: Guest, category: Category | null) => void;
-  setGuestSingle: (guest: Guest, single: boolean) => void;
-  moveTable: (table: Table, gridX: number, gridY: number) => void;
+    firstName: string
+    lastName: string
+    category?: Category
+  }) => void
+  removeGuest: (guest: Guest) => void
+  setGuestCategory: (guest: Guest, category: Category | null) => void
+  setGuestSingle: (guest: Guest, single: boolean) => void
+  moveTable: (table: Table, gridX: number, gridY: number) => void
   updateTable: (
     table: Table,
-    patch: { label?: string; capacity?: number; color?: string },
-  ) => void;
-  addTable: () => void;
-  removeTable: (table: Table) => void;
-  autoSeat: () => void;
-};
+    patch: { label?: string; capacity?: number; color?: string }
+  ) => void
+  addTable: () => void
+  removeTable: (table: Table) => void
+  autoSeat: () => void
+}
 
 type SwapPrompt = {
-  guest: Guest;
-  toTable: Table;
-};
+  guest: Guest
+  toTable: Table
+}
 
 /** Who (name + color) is currently touching a given guest/table. */
-export type RemoteTouch = { name: string; color: string };
+export type RemoteTouch = { name: string; color: string }
 
-const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 1.6;
-const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+const MIN_ZOOM = 0.4
+const MAX_ZOOM = 1.6
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z))
 
 export function Editor({
   code,
@@ -85,166 +81,174 @@ export function Editor({
   collaborators = [],
   onActivity,
 }: {
-  code: string;
-  canEdit: boolean;
-  tables: Table[];
-  guests: Guest[];
-  history: History;
-  collaborators?: Collaborator[];
-  onActivity?: (activity: Activity | null) => void;
+  code: string
+  canEdit: boolean
+  tables: Table[]
+  guests: Guest[]
+  history: History
+  collaborators?: Collaborator[]
+  onActivity?: (activity: Activity | null) => void
 }) {
-  const assignMut = useMutation(api.guests.assign);
-  const restoreMut = useMutation(api.guests.restoreAssignments);
-  const addGuestMut = useMutation(api.guests.add);
-  const removeGuestMut = useMutation(api.guests.remove);
-  const setCategoryMut = useMutation(api.guests.setCategory);
-  const setSingleMut = useMutation(api.guests.setSingle);
-  const moveTableMut = useMutation(api.tables.move);
-  const updateTableMut = useMutation(api.tables.update);
-  const addTableMut = useMutation(api.tables.add);
-  const removeTableMut = useMutation(api.tables.remove);
-  const autoSeatMut = useMutation(api.guests.autoSeat);
+  const assignMut = useMutation(api.guests.assign)
+  const restoreMut = useMutation(api.guests.restoreAssignments)
+  const addGuestMut = useMutation(api.guests.add)
+  const removeGuestMut = useMutation(api.guests.remove)
+  const setCategoryMut = useMutation(api.guests.setCategory)
+  const setSingleMut = useMutation(api.guests.setSingle)
+  const moveTableMut = useMutation(api.tables.move)
+  const updateTableMut = useMutation(api.tables.update)
+  const addTableMut = useMutation(api.tables.add)
+  const removeTableMut = useMutation(api.tables.remove)
+  const autoSeatMut = useMutation(api.guests.autoSeat)
 
-  const [activeGuest, setActiveGuest] = useState<Guest | null>(null);
-  const [swapPrompt, setSwapPrompt] = useState<SwapPrompt | null>(null);
+  const [activeGuest, setActiveGuest] = useState<Guest | null>(null)
+  const [swapPrompt, setSwapPrompt] = useState<SwapPrompt | null>(null)
   const [hoveredGuestId, setHoveredGuestId] = useState<Id<"guests"> | null>(
-    null,
-  );
-  const [seatPrompt, setSeatPrompt] = useState<Table | null>(null);
-  const [draggingTable, setDraggingTable] = useState(false);
+    null
+  )
+  const [seatPrompt, setSeatPrompt] = useState<Table | null>(null)
+  const [draggingTable, setDraggingTable] = useState(false)
+  const [guestsOpen, setGuestsOpen] = useState(false)
+
+  const seatedCount = useMemo(
+    () => guests.filter((g) => g.tableId).length,
+    [guests]
+  )
 
   // Latest server state, readable from history closures at undo time so we
   // can detect (and skip) reverts of changes another collaborator made since.
-  const guestsRef = useRef(guests);
-  const tablesRef = useRef(tables);
+  const guestsRef = useRef(guests)
+  const tablesRef = useRef(tables)
   useEffect(() => {
-    guestsRef.current = guests;
-    tablesRef.current = tables;
-  }, [guests, tables]);
+    guestsRef.current = guests
+    tablesRef.current = tables
+  }, [guests, tables])
 
   const remoteGuestTouch = useMemo(() => {
-    const map = new Map<string, RemoteTouch>();
+    const map = new Map<string, RemoteTouch>()
     for (const c of collaborators) {
       if (c.activity?.kind === "guest") {
-        map.set(c.activity.guestId, { name: c.name, color: c.color });
+        map.set(c.activity.guestId, { name: c.name, color: c.color })
       }
     }
-    return map;
-  }, [collaborators]);
+    return map
+  }, [collaborators])
 
   const remoteTableTouch = useMemo(() => {
-    const map = new Map<string, RemoteTouch>();
+    const map = new Map<string, RemoteTouch>()
     for (const c of collaborators) {
       if (c.activity?.kind === "table") {
-        map.set(c.activity.tableId, { name: c.name, color: c.color });
+        map.set(c.activity.tableId, { name: c.name, color: c.color })
       }
     }
-    return map;
-  }, [collaborators]);
+    return map
+  }, [collaborators])
 
-  const [scale, setScale] = useState(1);
-  const scaleRef = useRef(scale);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? 0.6 : 1
+  )
+  const scaleRef = useRef(scale)
+  const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    scaleRef.current = scale;
-  }, [scale]);
+    scaleRef.current = scale
+  }, [scale])
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  )
 
   /** Zoom while keeping the given viewport-relative focal point stable. */
   const zoomTo = (next: number, focalX?: number, focalY?: number) => {
-    const el = scrollRef.current;
-    const current = scaleRef.current;
-    const clamped = clampZoom(next);
+    const el = scrollRef.current
+    const current = scaleRef.current
+    const clamped = clampZoom(next)
     if (clamped === current || !el) {
-      setScale(clamped);
-      return;
+      setScale(clamped)
+      return
     }
-    const rect = el.getBoundingClientRect();
-    const fx = focalX ?? rect.width / 2;
-    const fy = focalY ?? rect.height / 2;
-    const contentX = el.scrollLeft + fx;
-    const contentY = el.scrollTop + fy;
-    const ratio = clamped / current;
-    setScale(clamped);
+    const rect = el.getBoundingClientRect()
+    const fx = focalX ?? rect.width / 2
+    const fy = focalY ?? rect.height / 2
+    const contentX = el.scrollLeft + fx
+    const contentY = el.scrollTop + fy
+    const ratio = clamped / current
+    setScale(clamped)
     requestAnimationFrame(() => {
-      el.scrollLeft = contentX * ratio - fx;
-      el.scrollTop = contentY * ratio - fy;
-    });
-  };
+      el.scrollLeft = contentX * ratio - fx
+      el.scrollTop = contentY * ratio - fy
+    })
+  }
 
   // Cmd/Ctrl + wheel and trackpad pinch zoom (non-passive to allow preventDefault).
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    const el = scrollRef.current
+    if (!el) return
     const handler = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      const current = scaleRef.current;
+      if (!e.ctrlKey && !e.metaKey) return
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const current = scaleRef.current
       zoomTo(
         current * (1 - e.deltaY * 0.0015),
         e.clientX - rect.left,
-        e.clientY - rect.top,
-      );
-    };
-    el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
-  }, []);
+        e.clientY - rect.top
+      )
+    }
+    el.addEventListener("wheel", handler, { passive: false })
+    return () => el.removeEventListener("wheel", handler)
+  }, [])
 
   const guestsByTable = useMemo(() => {
-    const map = new Map<Id<"tables">, Guest[]>();
+    const map = new Map<Id<"tables">, Guest[]>()
     for (const guest of guests) {
-      if (!guest.tableId) continue;
-      const list = map.get(guest.tableId) ?? [];
-      list.push(guest);
-      map.set(guest.tableId, list);
+      if (!guest.tableId) continue
+      const list = map.get(guest.tableId) ?? []
+      list.push(guest)
+      map.set(guest.tableId, list)
     }
-    return map;
-  }, [guests]);
+    return map
+  }, [guests])
 
   const run = (
     label: string,
     redo: () => Promise<void>,
-    undo: () => Promise<void>,
+    undo: () => Promise<void>
   ) => {
     redo()
       .then(() => history.push({ label, undo, redo }))
-      .catch((error: unknown) => console.error(`${label} failed`, error));
-  };
+      .catch((error: unknown) => console.error(`${label} failed`, error))
+  }
 
   const actions: EditorActions = {
     assignGuest: (guest, tableId) => {
-      const prev = guest.tableId ?? null;
-      if (prev === tableId) return;
+      const prev = guest.tableId ?? null
+      if (prev === tableId) return
       run(
         "Move guest",
         async () => {
-          const result = await assignMut({ code, guestId: guest._id, tableId });
+          const result = await assignMut({ code, guestId: guest._id, tableId })
           if (result === "full") {
-            const toTable = tables.find((t) => t._id === tableId);
-            if (toTable) setSwapPrompt({ guest, toTable });
-            throw new Error("Table is full");
+            const toTable = tables.find((t) => t._id === tableId)
+            if (toTable) setSwapPrompt({ guest, toTable })
+            throw new Error("Table is full")
           }
         },
         async () => {
           // Skip if a collaborator has moved this guest since; undo should
           // only revert this session's own work.
-          const current = guestsRef.current.find((g) => g._id === guest._id);
-          if (!current || (current.tableId ?? null) !== tableId) return;
+          const current = guestsRef.current.find((g) => g._id === guest._id)
+          if (!current || (current.tableId ?? null) !== tableId) return
           await restoreMut({
             code,
             assignments: [{ guestId: guest._id, tableId: prev }],
-          });
-        },
-      );
+          })
+        }
+      )
     },
 
     swapGuests: (guest, swapWith, toTableId) => {
-      const prevGuest = guest.tableId ?? null;
-      const prevOther = swapWith.tableId ?? null;
+      const prevGuest = guest.tableId ?? null
+      const prevOther = swapWith.tableId ?? null
       run(
         "Swap guests",
         async () => {
@@ -253,45 +257,45 @@ export function Editor({
             guestId: guest._id,
             tableId: toTableId,
             swapWithGuestId: swapWith._id,
-          });
+          })
         },
         async () => {
           // Skip if either guest was moved again by someone else since.
-          const a = guestsRef.current.find((g) => g._id === guest._id);
-          const b = guestsRef.current.find((g) => g._id === swapWith._id);
-          if (!a || !b) return;
-          if ((a.tableId ?? null) !== toTableId) return;
-          if ((b.tableId ?? null) !== prevGuest) return;
+          const a = guestsRef.current.find((g) => g._id === guest._id)
+          const b = guestsRef.current.find((g) => g._id === swapWith._id)
+          if (!a || !b) return
+          if ((a.tableId ?? null) !== toTableId) return
+          if ((b.tableId ?? null) !== prevGuest) return
           await restoreMut({
             code,
             assignments: [
               { guestId: guest._id, tableId: prevGuest },
               { guestId: swapWith._id, tableId: prevOther },
             ],
-          });
-        },
-      );
+          })
+        }
+      )
     },
 
     addGuest: (fields) => {
-      let id: Id<"guests"> | null = null;
+      let id: Id<"guests"> | null = null
       run(
         "Add guest",
         async () => {
-          id = await addGuestMut({ code, ...fields });
+          id = await addGuestMut({ code, ...fields })
         },
         async () => {
-          if (id) await removeGuestMut({ code, guestId: id });
-        },
-      );
+          if (id) await removeGuestMut({ code, guestId: id })
+        }
+      )
     },
 
     removeGuest: (guest) => {
-      let currentId = guest._id;
+      let currentId = guest._id
       run(
         "Remove guest",
         async () => {
-          await removeGuestMut({ code, guestId: currentId });
+          await removeGuestMut({ code, guestId: currentId })
         },
         async () => {
           currentId = await addGuestMut({
@@ -301,66 +305,66 @@ export function Editor({
             category: guest.category,
             tableId: guest.tableId,
             single: guest.single,
-          });
-        },
-      );
+          })
+        }
+      )
     },
 
     setGuestCategory: (guest, category) => {
-      const prev = guest.category ?? null;
-      if (prev === category) return;
+      const prev = guest.category ?? null
+      if (prev === category) return
       run(
         "Change category",
         async () => {
-          await setCategoryMut({ code, guestId: guest._id, category });
+          await setCategoryMut({ code, guestId: guest._id, category })
         },
         async () => {
           // Skip if someone else recategorized this guest since.
-          const current = guestsRef.current.find((g) => g._id === guest._id);
-          if (!current || (current.category ?? null) !== category) return;
-          await setCategoryMut({ code, guestId: guest._id, category: prev });
-        },
-      );
+          const current = guestsRef.current.find((g) => g._id === guest._id)
+          if (!current || (current.category ?? null) !== category) return
+          await setCategoryMut({ code, guestId: guest._id, category: prev })
+        }
+      )
     },
 
     setGuestSingle: (guest, single) => {
-      const prev = guest.single ?? false;
-      if (prev === single) return;
+      const prev = guest.single ?? false
+      if (prev === single) return
       run(
         single ? "Tag single" : "Untag single",
         async () => {
-          await setSingleMut({ code, guestId: guest._id, single });
+          await setSingleMut({ code, guestId: guest._id, single })
         },
         async () => {
           // Skip if someone else changed this guest's single tag since.
-          const current = guestsRef.current.find((g) => g._id === guest._id);
-          if (!current || (current.single ?? false) !== single) return;
-          await setSingleMut({ code, guestId: guest._id, single: prev });
-        },
-      );
+          const current = guestsRef.current.find((g) => g._id === guest._id)
+          if (!current || (current.single ?? false) !== single) return
+          await setSingleMut({ code, guestId: guest._id, single: prev })
+        }
+      )
     },
 
     moveTable: (table, gridX, gridY) => {
-      const { gridX: prevX, gridY: prevY } = table;
-      if (prevX === gridX && prevY === gridY) return;
+      const { gridX: prevX, gridY: prevY } = table
+      if (prevX === gridX && prevY === gridY) return
       run(
         "Move table",
         async () => {
-          await moveTableMut({ code, tableId: table._id, gridX, gridY });
+          await moveTableMut({ code, tableId: table._id, gridX, gridY })
         },
         async () => {
           // Skip if someone else moved this table since.
-          const current = tablesRef.current.find((t) => t._id === table._id);
+          const current = tablesRef.current.find((t) => t._id === table._id)
           if (!current || current.gridX !== gridX || current.gridY !== gridY)
-            return;
+            return
           await moveTableMut({
             code,
             tableId: table._id,
             gridX: prevX,
             gridY: prevY,
-          });
-        },
-      );
+          })
+        }
+      )
     },
 
     updateTable: (table, patch) => {
@@ -368,45 +372,45 @@ export function Editor({
         label: table.label,
         capacity: table.capacity,
         color: table.color,
-      };
+      }
       run(
         "Edit table",
         async () => {
-          await updateTableMut({ code, tableId: table._id, ...patch });
+          await updateTableMut({ code, tableId: table._id, ...patch })
         },
         async () => {
           // Skip if someone else edited the same fields since.
-          const current = tablesRef.current.find((t) => t._id === table._id);
-          if (!current) return;
+          const current = tablesRef.current.find((t) => t._id === table._id)
+          if (!current) return
           for (const key of Object.keys(patch) as (keyof typeof patch)[]) {
-            if (current[key] !== patch[key]) return;
+            if (current[key] !== patch[key]) return
           }
-          await updateTableMut({ code, tableId: table._id, ...prev });
-        },
-      );
+          await updateTableMut({ code, tableId: table._id, ...prev })
+        }
+      )
     },
 
     addTable: () => {
-      const spot = findFreeCell(tables);
-      let id: Id<"tables"> | null = null;
+      const spot = findFreeCell(tables)
+      let id: Id<"tables"> | null = null
       run(
         "Add table",
         async () => {
-          id = await addTableMut({ code, gridX: spot.x, gridY: spot.y });
+          id = await addTableMut({ code, gridX: spot.x, gridY: spot.y })
         },
         async () => {
-          if (id) await removeTableMut({ code, tableId: id });
-        },
-      );
+          if (id) await removeTableMut({ code, tableId: id })
+        }
+      )
     },
 
     removeTable: (table) => {
-      let currentId = table._id;
-      const seatedIds = (guestsByTable.get(table._id) ?? []).map((g) => g._id);
+      let currentId = table._id
+      const seatedIds = (guestsByTable.get(table._id) ?? []).map((g) => g._id)
       run(
         "Remove table",
         async () => {
-          await removeTableMut({ code, tableId: currentId });
+          await removeTableMut({ code, tableId: currentId })
         },
         async () => {
           currentId = await addTableMut({
@@ -416,107 +420,107 @@ export function Editor({
             label: table.label,
             capacity: table.capacity,
             color: table.color,
-          });
+          })
           await restoreMut({
             code,
             assignments: seatedIds.map((guestId) => ({
               guestId,
               tableId: currentId,
             })),
-          });
-        },
-      );
+          })
+        }
+      )
     },
 
     autoSeat: () => {
       const snapshot = guests.map((g) => ({
         guestId: g._id,
         tableId: g.tableId ?? null,
-      }));
+      }))
       run(
         "Auto-seat",
         async () => {
-          await autoSeatMut({ code });
+          await autoSeatMut({ code })
         },
         async () => {
-          await restoreMut({ code, assignments: snapshot });
-        },
-      );
+          await restoreMut({ code, assignments: snapshot })
+        }
+      )
     },
-  };
+  }
 
   const onDragStart = (event: DragStartEvent) => {
-    const data = event.active.data.current;
+    const data = event.active.data.current
     if (data?.type === "guest") {
-      const guest = guests.find((g) => g._id === data.guestId);
-      setActiveGuest(guest ?? null);
-      if (guest) onActivity?.({ kind: "guest", guestId: guest._id });
+      const guest = guests.find((g) => g._id === data.guestId)
+      setActiveGuest(guest ?? null)
+      if (guest) onActivity?.({ kind: "guest", guestId: guest._id })
     } else if (data?.type === "table") {
-      setDraggingTable(true);
-      onActivity?.({ kind: "table", tableId: data.tableId as Table["_id"] });
+      setDraggingTable(true)
+      onActivity?.({ kind: "table", tableId: data.tableId as Table["_id"] })
     }
-  };
+  }
 
   const onDragCancel = () => {
-    setActiveGuest(null);
-    setDraggingTable(false);
-    onActivity?.(null);
-  };
+    setActiveGuest(null)
+    setDraggingTable(false)
+    onActivity?.(null)
+  }
 
   const onDragEnd = (event: DragEndEvent) => {
-    const data = event.active.data.current;
-    setActiveGuest(null);
-    setDraggingTable(false);
-    onActivity?.(null);
+    const data = event.active.data.current
+    setActiveGuest(null)
+    setDraggingTable(false)
+    onActivity?.(null)
 
     if (data?.type === "table") {
-      const table = tables.find((t) => t._id === data.tableId);
-      if (!table) return;
+      const table = tables.find((t) => t._id === data.tableId)
+      if (!table) return
       const gridX = Math.max(
         0,
-        Math.round((table.gridX * CELL + event.delta.x / scale) / CELL),
-      );
+        Math.round((table.gridX * CELL + event.delta.x / scale) / CELL)
+      )
       const gridY = Math.max(
         0,
-        Math.round((table.gridY * CELL + event.delta.y / scale) / CELL),
-      );
+        Math.round((table.gridY * CELL + event.delta.y / scale) / CELL)
+      )
       const occupied = tables.some(
-        (t) => t._id !== table._id && t.gridX === gridX && t.gridY === gridY,
-      );
-      if (!occupied) actions.moveTable(table, gridX, gridY);
-      return;
+        (t) => t._id !== table._id && t.gridX === gridX && t.gridY === gridY
+      )
+      if (!occupied) actions.moveTable(table, gridX, gridY)
+      return
     }
 
-    if (data?.type !== "guest" || !event.over) return;
-    const guest = guests.find((g) => g._id === data.guestId);
-    if (!guest) return;
+    if (data?.type !== "guest" || !event.over) return
+    const guest = guests.find((g) => g._id === data.guestId)
+    if (!guest) return
 
-    const overData = event.over.data.current;
+    const overData = event.over.data.current
     if (overData?.type === "unassign") {
-      if (guest.tableId) actions.assignGuest(guest, null);
-      return;
+      if (guest.tableId) actions.assignGuest(guest, null)
+      return
     }
-    if (overData?.type !== "table-drop") return;
+    if (overData?.type !== "table-drop") return
 
-    const toTable = tables.find((t) => t._id === overData.tableId);
-    if (!toTable || toTable._id === guest.tableId) return;
+    const toTable = tables.find((t) => t._id === overData.tableId)
+    if (!toTable || toTable._id === guest.tableId) return
 
-    const occupancy = (guestsByTable.get(toTable._id) ?? []).length;
+    const occupancy = (guestsByTable.get(toTable._id) ?? []).length
     if (occupancy >= toTable.capacity) {
-      setSwapPrompt({ guest, toTable });
+      setSwapPrompt({ guest, toTable })
     } else {
-      actions.assignGuest(guest, toTable._id);
+      actions.assignGuest(guest, toTable._id)
     }
-  };
+  }
 
   const canvasSize = useMemo(() => {
-    const maxX = Math.max(0, ...tables.map((t) => t.gridX));
-    const maxY = Math.max(0, ...tables.map((t) => t.gridY));
+    const maxX = Math.max(0, ...tables.map((t) => t.gridX))
+    const maxY = Math.max(0, ...tables.map((t) => t.gridY))
     return {
       width: maxX * CELL + NODE + 96,
       height: maxY * CELL + NODE + 96,
-    };
-  }, [tables]);
+    }
+  }, [tables])
 
   const sortedTables = useMemo(
     () =>
@@ -525,10 +529,10 @@ export function Editor({
           ? a._creationTime - b._creationTime
           : a.kind === "couple"
             ? -1
-            : 1,
+            : 1
       ),
-    [tables],
-  );
+    [tables]
+  )
 
   return (
     <DndContext
@@ -585,7 +589,7 @@ export function Editor({
           </div>
 
           {canEdit && (
-            <div className="absolute bottom-4 left-4 z-10">
+            <div className="absolute bottom-4 left-4 z-10 hidden md:block">
               <Button
                 variant="outline"
                 size="sm"
@@ -597,7 +601,7 @@ export function Editor({
             </div>
           )}
 
-          <div className="absolute right-4 bottom-4 z-10 flex items-center gap-1 rounded-lg border bg-card p-1 shadow-sm">
+          <div className="absolute right-4 bottom-4 z-10 hidden items-center gap-1 rounded-lg border bg-card p-1 shadow-sm md:flex">
             <Button
               variant="ghost"
               size="icon-xs"
@@ -608,7 +612,7 @@ export function Editor({
               <Minus />
             </Button>
             <button
-              className="min-w-11 text-center text-xs tabular-nums text-muted-foreground hover:text-foreground"
+              className="min-w-11 text-center text-xs text-muted-foreground tabular-nums hover:text-foreground"
               onClick={() => zoomTo(1)}
               title="Reset zoom"
             >
@@ -624,7 +628,36 @@ export function Editor({
               <Plus />
             </Button>
           </div>
+
+          {/* Mobile action bar: add table + open guest sheet. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 p-3 md:hidden">
+            {canEdit ? (
+              <Button
+                variant="outline"
+                className="pointer-events-auto h-11 rounded-full bg-card px-5 text-sm shadow-sm"
+                onClick={() => actions.addTable()}
+              >
+                <Plus data-icon="inline-start pl-1" /> Table
+              </Button>
+            ) : (
+              <span />
+            )}
+            <Button
+              className="pointer-events-auto h-11 rounded-full px-5 text-sm shadow-md"
+              onClick={() => setGuestsOpen(true)}
+            >
+              <Users data-icon="inline-start pl-1" /> Guests · {seatedCount}/
+              {guests.length}
+            </Button>
+          </div>
         </div>
+
+        {guestsOpen && (
+          <div
+            className="fixed inset-0 top-[52px] z-40 bg-black/20 md:hidden"
+            onClick={() => setGuestsOpen(false)}
+          />
+        )}
 
         <Sidebar
           guests={guests}
@@ -633,6 +666,8 @@ export function Editor({
           actions={actions}
           remoteGuestTouch={remoteGuestTouch}
           onHoverGuest={setHoveredGuestId}
+          mobileOpen={guestsOpen}
+          onClose={() => setGuestsOpen(false)}
         />
       </div>
 
@@ -650,8 +685,8 @@ export function Editor({
           unseated={guests.filter((g) => !g.tableId)}
           onClose={() => setSeatPrompt(null)}
           onPick={(guest) => {
-            actions.assignGuest(guest, seatPrompt._id);
-            setSeatPrompt(null);
+            actions.assignGuest(guest, seatPrompt._id)
+            setSeatPrompt(null)
           }}
         />
       )}
@@ -665,14 +700,14 @@ export function Editor({
             actions.swapGuests(
               swapPrompt.guest,
               swapWith,
-              swapPrompt.toTable._id,
-            );
-            setSwapPrompt(null);
+              swapPrompt.toTable._id
+            )
+            setSwapPrompt(null)
           }}
         />
       )}
     </DndContext>
-  );
+  )
 }
 
 function SeatGuestDialog({
@@ -681,27 +716,26 @@ function SeatGuestDialog({
   onClose,
   onPick,
 }: {
-  table: Table;
-  unseated: Guest[];
-  onClose: () => void;
-  onPick: (guest: Guest) => void;
+  table: Table
+  unseated: Guest[]
+  onClose: () => void
+  onPick: (guest: Guest) => void
 }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState("")
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase()
     return unseated
       .filter(
         (g) =>
-          !query ||
-          `${g.firstName} ${g.lastName}`.toLowerCase().includes(query),
+          !query || `${g.firstName} ${g.lastName}`.toLowerCase().includes(query)
       )
       .sort((a, b) =>
         `${a.lastName} ${a.firstName}`.localeCompare(
-          `${b.lastName} ${b.firstName}`,
-        ),
-      );
-  }, [unseated, search]);
+          `${b.lastName} ${b.firstName}`
+        )
+      )
+  }, [unseated, search])
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -727,7 +761,7 @@ function SeatGuestDialog({
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && filtered.length === 1) {
-                    onPick(filtered[0]);
+                    onPick(filtered[0])
                   }
                 }}
               />
@@ -760,7 +794,7 @@ function SeatGuestDialog({
         )}
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function SwapDialog({
@@ -769,16 +803,16 @@ function SwapDialog({
   onClose,
   onSwap,
 }: {
-  prompt: SwapPrompt;
-  seated: Guest[];
-  onClose: () => void;
-  onSwap: (swapWith: Guest) => void;
+  prompt: SwapPrompt
+  seated: Guest[]
+  onClose: () => void
+  onSwap: (swapWith: Guest) => void
 }) {
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedId, setSelectedId] = useState<string>("")
   const items = seated.map((g) => ({
     value: g._id as string,
     label: `${g.firstName} ${g.lastName}`.trim(),
-  }));
+  }))
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -816,8 +850,8 @@ function SwapDialog({
           <Button
             disabled={!selectedId}
             onClick={() => {
-              const swapWith = seated.find((g) => g._id === selectedId);
-              if (swapWith) onSwap(swapWith);
+              const swapWith = seated.find((g) => g._id === selectedId)
+              if (swapWith) onSwap(swapWith)
             }}
           >
             Swap
@@ -825,16 +859,16 @@ function SwapDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 function findFreeCell(tables: Table[]): { x: number; y: number } {
-  const occupied = new Set(tables.map((t) => `${t.gridX},${t.gridY}`));
-  const step = 3;
+  const occupied = new Set(tables.map((t) => `${t.gridX},${t.gridY}`))
+  const step = 3
   for (let y = 0; y < 100; y += step) {
     for (let x = 0; x < 12; x += step) {
-      if (!occupied.has(`${x},${y}`)) return { x, y };
+      if (!occupied.has(`${x},${y}`)) return { x, y }
     }
   }
-  return { x: 0, y: 0 };
+  return { x: 0, y: 0 }
 }

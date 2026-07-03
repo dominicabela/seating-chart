@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { GripVertical, Plus, Search, Sparkles, X } from "lucide-react";
+import { useMemo, useState } from "react"
+import { useDraggable, useDroppable } from "@dnd-kit/core"
+import { GripVertical, Plus, Search, Sparkles, X } from "lucide-react"
 
-import type { Doc, Id } from "../../../convex/_generated/dataModel";
-import { Button } from "@/components/ui/button";
+import type { Doc, Id } from "../../../convex/_generated/dataModel"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -11,35 +11,35 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import {
   CATEGORIES,
   CATEGORY_BADGE_CLASS,
   CATEGORY_LABEL,
   type Category,
-} from "@/lib/categories";
-import type { EditorActions, RemoteTouch } from "./Editor";
+} from "@/lib/categories"
+import type { EditorActions, RemoteTouch } from "./Editor"
 
-type Guest = Doc<"guests">;
-type Table = Doc<"tables">;
+type Guest = Doc<"guests">
+type Table = Doc<"tables">
 
-const ALL = "__all__";
-const UNCATEGORIZED = "__uncategorized__";
+const ALL = "__all__"
+const UNCATEGORIZED = "__uncategorized__"
 
-type SortBy = "name" | "category" | "table";
+type SortBy = "name" | "category" | "table"
 
 const CATEGORY_ORDER = new Map<string, number>(
-  CATEGORIES.map((c, i) => [c.value, i]),
-);
+  CATEGORIES.map((c, i) => [c.value, i])
+)
 
 export function Sidebar({
   guests,
@@ -48,107 +48,136 @@ export function Sidebar({
   actions,
   remoteGuestTouch,
   onHoverGuest,
+  mobileOpen = false,
+  onClose,
 }: {
-  guests: Guest[];
-  tables: Table[];
-  canEdit: boolean;
-  actions: EditorActions;
-  remoteGuestTouch?: Map<string, RemoteTouch>;
-  onHoverGuest?: (guestId: Id<"guests"> | null) => void;
+  guests: Guest[]
+  tables: Table[]
+  canEdit: boolean
+  actions: EditorActions
+  remoteGuestTouch?: Map<string, RemoteTouch>
+  onHoverGuest?: (guestId: Id<"guests"> | null) => void
+  /** Whether the mobile bottom sheet is open (ignored on desktop). */
+  mobileOpen?: boolean
+  /** Close handler for the mobile bottom sheet. */
+  onClose?: () => void
 }) {
-  const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>(ALL);
-  const [statusFilter, setStatusFilter] = useState<string>(ALL);
-  const [sortBy, setSortBy] = useState<SortBy>("name");
-  const [showAdd, setShowAdd] = useState(false);
-  const [confirmAutoSeat, setConfirmAutoSeat] = useState(false);
+  const [search, setSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL)
+  const [statusFilter, setStatusFilter] = useState<string>(ALL)
+  const [sortBy, setSortBy] = useState<SortBy>("name")
+  const [showAdd, setShowAdd] = useState(false)
+  const [confirmAutoSeat, setConfirmAutoSeat] = useState(false)
 
   const { setNodeRef, isOver } = useDroppable({
     id: "unassign",
     data: { type: "unassign" },
     disabled: !canEdit,
-  });
+  })
 
   const tableLabels = useMemo(
     () => new Map<Id<"tables">, string>(tables.map((t) => [t._id, t.label])),
-    [tables],
-  );
+    [tables]
+  )
 
-  const seatedCount = guests.filter((g) => g.tableId).length;
+  const seatedCount = guests.filter((g) => g.tableId).length
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = search.trim().toLowerCase()
     const byName = (a: Guest, b: Guest) =>
       `${a.lastName} ${a.firstName}`.localeCompare(
-        `${b.lastName} ${b.firstName}`,
-      );
+        `${b.lastName} ${b.firstName}`
+      )
     const compare = (a: Guest, b: Guest): number => {
       if (sortBy === "category") {
         // Uncategorized last, then plan order, then name.
-        const ai = a.category ? (CATEGORY_ORDER.get(a.category) ?? 99) : 100;
-        const bi = b.category ? (CATEGORY_ORDER.get(b.category) ?? 99) : 100;
-        if (ai !== bi) return ai - bi;
+        const ai = a.category ? (CATEGORY_ORDER.get(a.category) ?? 99) : 100
+        const bi = b.category ? (CATEGORY_ORDER.get(b.category) ?? 99) : 100
+        if (ai !== bi) return ai - bi
       } else if (sortBy === "table") {
         // Unseated last, then by table label (numeric-aware), then name.
-        const al = a.tableId ? (tableLabels.get(a.tableId) ?? "") : null;
-        const bl = b.tableId ? (tableLabels.get(b.tableId) ?? "") : null;
-        if (al === null && bl !== null) return 1;
-        if (al !== null && bl === null) return -1;
+        const al = a.tableId ? (tableLabels.get(a.tableId) ?? "") : null
+        const bl = b.tableId ? (tableLabels.get(b.tableId) ?? "") : null
+        if (al === null && bl !== null) return 1
+        if (al !== null && bl === null) return -1
         if (al !== null && bl !== null && al !== bl) {
-          return al.localeCompare(bl, undefined, { numeric: true });
+          return al.localeCompare(bl, undefined, { numeric: true })
         }
       }
-      return byName(a, b);
-    };
+      return byName(a, b)
+    }
     return guests
       .filter((guest) => {
         if (
           query &&
           !`${guest.firstName} ${guest.lastName}`.toLowerCase().includes(query)
         ) {
-          return false;
+          return false
         }
-        if (categoryFilter === UNCATEGORIZED && guest.category) return false;
+        if (categoryFilter === UNCATEGORIZED && guest.category) return false
         if (
           categoryFilter !== ALL &&
           categoryFilter !== UNCATEGORIZED &&
           guest.category !== categoryFilter
         ) {
-          return false;
+          return false
         }
-        if (statusFilter === "seated" && !guest.tableId) return false;
-        if (statusFilter === "unseated" && guest.tableId) return false;
-        return true;
+        if (statusFilter === "seated" && !guest.tableId) return false
+        if (statusFilter === "unseated" && guest.tableId) return false
+        return true
       })
-      .sort(compare);
-  }, [guests, search, categoryFilter, statusFilter, sortBy, tableLabels]);
+      .sort(compare)
+  }, [guests, search, categoryFilter, statusFilter, sortBy, tableLabels])
 
-  const anySeated = seatedCount > 0;
+  const anySeated = seatedCount > 0
 
   const categoryItems = [
     { value: ALL, label: "All categories" },
     { value: UNCATEGORIZED, label: "Uncategorized" },
     ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
-  ];
+  ]
   const statusItems = [
     { value: ALL, label: "All guests" },
     { value: "seated", label: "Seated" },
     { value: "unseated", label: "Unseated" },
-  ];
+  ]
   const sortItems: { value: SortBy; label: string }[] = [
     { value: "name", label: "Sort · Last name" },
     { value: "category", label: "Sort · Category" },
     { value: "table", label: "Sort · Table" },
-  ];
+  ]
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-card/40">
+    <aside
+      className={cn(
+        "z-50 flex flex-col border-l bg-card",
+        // Docked panel on desktop.
+        "md:relative md:inset-auto md:w-80 md:shrink-0 md:translate-y-0 md:rounded-none md:bg-card/40 md:shadow-none md:transition-none",
+        // Slide-up bottom sheet on mobile.
+        "fixed inset-x-0 top-[52px] bottom-0 rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out",
+        !mobileOpen && "translate-y-[calc(100%+1rem)] md:translate-y-0"
+      )}
+    >
+      <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border md:hidden" />
       <div className="flex flex-col gap-2.5 border-b p-3">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">Guests</h2>
-          <span className="text-xs text-muted-foreground">
-            {seatedCount} of {guests.length} seated
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {seatedCount} of {guests.length} seated
+            </span>
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="md:hidden"
+                onClick={onClose}
+                aria-label="Close guest list"
+              >
+                <X className="size-4" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {canEdit && (
@@ -158,8 +187,8 @@ export function Sidebar({
             className="w-full"
             disabled={guests.length === 0}
             onClick={() => {
-              if (anySeated) setConfirmAutoSeat(true);
-              else actions.autoSeat();
+              if (anySeated) setConfirmAutoSeat(true)
+              else actions.autoSeat()
             }}
           >
             <Sparkles data-icon="inline-start" /> Auto-seat guests
@@ -233,7 +262,7 @@ export function Sidebar({
         ref={setNodeRef}
         className={cn(
           "flex-1 overflow-y-auto transition-colors",
-          isOver && "bg-primary/5",
+          isOver && "bg-primary/5"
         )}
       >
         {filtered.length === 0 ? (
@@ -247,9 +276,7 @@ export function Sidebar({
                 key={guest._id}
                 guest={guest}
                 tableLabel={
-                  guest.tableId
-                    ? (tableLabels.get(guest.tableId) ?? "?")
-                    : null
+                  guest.tableId ? (tableLabels.get(guest.tableId) ?? "?") : null
                 }
                 canEdit={canEdit}
                 actions={actions}
@@ -271,8 +298,8 @@ export function Sidebar({
           {showAdd ? (
             <AddGuestForm
               onAdd={(fields) => {
-                actions.addGuest(fields);
-                setShowAdd(false);
+                actions.addGuest(fields)
+                setShowAdd(false)
               }}
               onCancel={() => setShowAdd(false)}
             />
@@ -290,7 +317,10 @@ export function Sidebar({
       )}
 
       {confirmAutoSeat && (
-        <Dialog open onOpenChange={(open) => !open && setConfirmAutoSeat(false)}>
+        <Dialog
+          open
+          onOpenChange={(open) => !open && setConfirmAutoSeat(false)}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Re-run auto-seating?</DialogTitle>
@@ -300,13 +330,16 @@ export function Sidebar({
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmAutoSeat(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setConfirmAutoSeat(false)}
+              >
                 Cancel
               </Button>
               <Button
                 onClick={() => {
-                  actions.autoSeat();
-                  setConfirmAutoSeat(false);
+                  actions.autoSeat()
+                  setConfirmAutoSeat(false)
                 }}
               >
                 Auto-seat
@@ -316,7 +349,7 @@ export function Sidebar({
         </Dialog>
       )}
     </aside>
-  );
+  )
 }
 
 function GuestRow({
@@ -327,32 +360,32 @@ function GuestRow({
   remote,
   onHover,
 }: {
-  guest: Guest;
-  tableLabel: string | null;
-  canEdit: boolean;
-  actions: EditorActions;
-  remote?: RemoteTouch;
-  onHover?: (guestId: Id<"guests"> | null) => void;
+  guest: Guest
+  tableLabel: string | null
+  canEdit: boolean
+  actions: EditorActions
+  remote?: RemoteTouch
+  onHover?: (guestId: Id<"guests"> | null) => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `row:${guest._id}`,
     data: { type: "guest", guestId: guest._id },
     disabled: !canEdit,
-  });
+  })
 
-  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   const categoryItems = [
     { value: "", label: "Uncategorized" },
     ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
-  ];
+  ]
 
   return (
     <li
       ref={setNodeRef}
       className={cn(
         "group flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 hover:bg-muted/60",
-        isDragging && "opacity-40",
+        isDragging && "opacity-40"
       )}
       style={
         remote ? { boxShadow: `inset 0 0 0 1.5px ${remote.color}` } : undefined
@@ -382,16 +415,16 @@ function GuestRow({
               onValueChange={(v) =>
                 actions.setGuestCategory(
                   guest,
-                  (v as string) === "" ? null : (v as Category),
+                  (v as string) === "" ? null : (v as Category)
                 )
               }
             >
               <SelectTrigger
                 className={cn(
-                  "h-4 gap-0.5 rounded-full border-transparent px-1.5 py-0 text-[10px] leading-none font-medium hover:border-border [&_svg]:size-2.5",
+                  "!h-auto gap-2 rounded-lg border-transparent px-2 !py-1.5 text-[10px] leading-none font-medium hover:border-border [&_svg]:size-2.5",
                   guest.category
                     ? CATEGORY_BADGE_CLASS[guest.category]
-                    : "bg-muted text-muted-foreground",
+                    : "bg-muted text-muted-foreground"
                 )}
               >
                 <SelectValue>
@@ -412,7 +445,7 @@ function GuestRow({
                 "rounded-full px-1.5 py-0.5 text-[10px] leading-none font-medium",
                 guest.category
                   ? CATEGORY_BADGE_CLASS[guest.category]
-                  : "bg-muted text-muted-foreground",
+                  : "bg-muted text-muted-foreground"
               )}
             >
               {guest.category ? CATEGORY_LABEL[guest.category] : "—"}
@@ -423,7 +456,7 @@ function GuestRow({
       <span
         className={cn(
           "shrink-0 text-[10px]",
-          tableLabel ? "text-muted-foreground" : "text-amber-600",
+          tableLabel ? "text-muted-foreground" : "text-amber-600"
         )}
       >
         {tableLabel ?? "Unseated"}
@@ -435,9 +468,11 @@ function GuestRow({
             "shrink-0 text-xs leading-none",
             guest.single
               ? "opacity-100"
-              : "hidden opacity-40 group-hover:block hover:opacity-100",
+              : "hidden opacity-40 group-hover:block hover:opacity-100"
           )}
-          title={guest.single ? "Tagged single — click to remove" : "Tag as single"}
+          title={
+            guest.single ? "Tagged single — click to remove" : "Tag as single"
+          }
         >
           💘
         </button>
@@ -482,8 +517,8 @@ function GuestRow({
               <Button
                 variant="destructive"
                 onClick={() => {
-                  actions.removeGuest(guest);
-                  setConfirmRemove(false);
+                  actions.removeGuest(guest)
+                  setConfirmRemove(false)
                 }}
               >
                 Remove
@@ -493,7 +528,7 @@ function GuestRow({
         </Dialog>
       )}
     </li>
-  );
+  )
 }
 
 function AddGuestForm({
@@ -501,29 +536,29 @@ function AddGuestForm({
   onCancel,
 }: {
   onAdd: (fields: {
-    firstName: string;
-    lastName: string;
-    category?: Category;
-  }) => void;
-  onCancel: () => void;
+    firstName: string
+    lastName: string
+    category?: Category
+  }) => void
+  onCancel: () => void
 }) {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [category, setCategory] = useState<string>("");
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [category, setCategory] = useState<string>("")
 
   const categoryItems = [
     { value: "", label: "No category" },
     ...CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
-  ];
+  ]
 
   const submit = () => {
-    if (!firstName.trim() && !lastName.trim()) return;
+    if (!firstName.trim() && !lastName.trim()) return
     onAdd({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       category: category === "" ? undefined : (category as Category),
-    });
-  };
+    })
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -567,5 +602,5 @@ function AddGuestForm({
         </Button>
       </div>
     </div>
-  );
+  )
 }
