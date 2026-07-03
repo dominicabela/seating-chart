@@ -53,6 +53,7 @@ export type EditorActions = {
   }) => void;
   removeGuest: (guest: Guest) => void;
   setGuestCategory: (guest: Guest, category: Category | null) => void;
+  setGuestSingle: (guest: Guest, single: boolean) => void;
   moveTable: (table: Table, gridX: number, gridY: number) => void;
   updateTable: (
     table: Table,
@@ -97,6 +98,7 @@ export function Editor({
   const addGuestMut = useMutation(api.guests.add);
   const removeGuestMut = useMutation(api.guests.remove);
   const setCategoryMut = useMutation(api.guests.setCategory);
+  const setSingleMut = useMutation(api.guests.setSingle);
   const moveTableMut = useMutation(api.tables.move);
   const updateTableMut = useMutation(api.tables.update);
   const addTableMut = useMutation(api.tables.add);
@@ -298,6 +300,7 @@ export function Editor({
             lastName: guest.lastName,
             category: guest.category,
             tableId: guest.tableId,
+            single: guest.single,
           });
         },
       );
@@ -316,6 +319,23 @@ export function Editor({
           const current = guestsRef.current.find((g) => g._id === guest._id);
           if (!current || (current.category ?? null) !== category) return;
           await setCategoryMut({ code, guestId: guest._id, category: prev });
+        },
+      );
+    },
+
+    setGuestSingle: (guest, single) => {
+      const prev = guest.single ?? false;
+      if (prev === single) return;
+      run(
+        single ? "Tag single" : "Untag single",
+        async () => {
+          await setSingleMut({ code, guestId: guest._id, single });
+        },
+        async () => {
+          // Skip if someone else changed this guest's single tag since.
+          const current = guestsRef.current.find((g) => g._id === guest._id);
+          if (!current || (current.single ?? false) !== single) return;
+          await setSingleMut({ code, guestId: guest._id, single: prev });
         },
       );
     },

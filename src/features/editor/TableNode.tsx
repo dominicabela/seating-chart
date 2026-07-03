@@ -467,7 +467,7 @@ function SeatChip({
               {...attributes}
               {...listeners}
               className={cn(
-                "relative z-10 flex size-full touch-none items-center justify-center rounded-full border bg-card text-[10px] font-semibold text-foreground/80 shadow-xs select-none",
+                "relative z-10 flex size-full touch-none items-center justify-center overflow-hidden rounded-full border bg-card text-[10px] font-semibold text-foreground/80 shadow-xs select-none",
                 canEdit && "cursor-grab active:cursor-grabbing",
                 highlight && "z-30",
               )}
@@ -478,14 +478,23 @@ function SeatChip({
                     ? { boxShadow: `0 0 0 2px ${remote.color}` }
                     : undefined
               }
-            />
+            >
+              {guest.single && (
+                <span
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center text-[1.35rem] leading-none"
+                  aria-hidden
+                >
+                  💘
+                </span>
+              )}
+              {!guest.single && <span className="relative z-10">{initials}</span>}
+            </div>
           }
-        >
-          {initials}
-        </TooltipTrigger>
+        />
         <TooltipContent>
           {guest.firstName} {guest.lastName}
           {guest.category ? ` · ${CATEGORY_LABEL[guest.category]}` : ""}
+          {guest.single ? " · Single" : ""}
         </TooltipContent>
       </Tooltip>
       <span

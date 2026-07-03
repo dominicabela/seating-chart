@@ -12,6 +12,7 @@ const guestDoc = v.object({
   lastName: v.string(),
   category: v.optional(categoryValidator),
   tableId: v.optional(v.id("tables")),
+  single: v.optional(v.boolean()),
 });
 
 type Category = NonNullable<Doc<"guests">["category"]>;
@@ -79,6 +80,7 @@ export const add = mutation({
     lastName: v.string(),
     category: v.optional(categoryValidator),
     tableId: v.optional(v.id("tables")),
+    single: v.optional(v.boolean()),
   },
   returns: v.id("guests"),
   handler: async (ctx, args) => {
@@ -89,6 +91,7 @@ export const add = mutation({
       lastName: args.lastName.trim(),
       category: args.category,
       tableId: args.tableId,
+      single: args.single,
     });
   },
 });
@@ -116,6 +119,23 @@ export const setCategory = mutation({
     await requireGuest(ctx, project._id, args.guestId);
     await ctx.db.patch(args.guestId, {
       category: args.category ?? undefined,
+    });
+    return null;
+  },
+});
+
+export const setSingle = mutation({
+  args: {
+    code: v.string(),
+    guestId: v.id("guests"),
+    single: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const project = await requireEdit(ctx, args.code);
+    await requireGuest(ctx, project._id, args.guestId);
+    await ctx.db.patch(args.guestId, {
+      single: args.single ? true : undefined,
     });
     return null;
   },

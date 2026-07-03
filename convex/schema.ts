@@ -48,6 +48,7 @@ export default defineSchema({
     lastName: v.string(),
     category: v.optional(categoryValidator),
     tableId: v.optional(v.id("tables")),
+    single: v.optional(v.boolean()),
   })
     .index("by_project", ["projectId"])
     .index("by_table", ["tableId"]),

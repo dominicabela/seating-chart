@@ -428,6 +428,30 @@ function GuestRow({
       >
         {tableLabel ?? "Unseated"}
       </span>
+      {canEdit ? (
+        <button
+          onClick={() => actions.setGuestSingle(guest, !guest.single)}
+          className={cn(
+            "shrink-0 text-xs leading-none",
+            guest.single
+              ? "opacity-100"
+              : "hidden opacity-40 group-hover:block hover:opacity-100",
+          )}
+          title={guest.single ? "Tagged single — click to remove" : "Tag as single"}
+        >
+          💘
+        </button>
+      ) : (
+        guest.single && (
+          <span
+            className="shrink-0 text-xs leading-none"
+            title="Single"
+            aria-label="Single"
+          >
+            💘
+          </span>
+        )
+      )}
       {canEdit && (
         <button
           onClick={() => setConfirmRemove(true)}
