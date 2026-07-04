@@ -149,6 +149,9 @@ export function Editor({
   )
   const scaleRef = useRef(scale)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const sizerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const canvasSizeRef = useRef({ width: 0, height: 0 })
   useEffect(() => {
     scaleRef.current = scale
   }, [scale])
@@ -196,6 +199,77 @@ export function Editor({
     }
     el.addEventListener("wheel", handler, { passive: false })
     return () => el.removeEventListener("wheel", handler)
+  }, [])
+
+  // Two-finger pinch zoom on touch devices. During the gesture we mutate the
+  // DOM directly (transform + scroll) for a jank-free 60fps feel, then commit
+  // the final scale to React state on release. One-finger panning is left to
+  // native scrolling (see `touch-pan-x touch-pan-y` on the scroll container).
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    let start: { dist: number; scale: number; cx: number; cy: number } | null =
+      null
+    let latest = scaleRef.current
+
+    const distOf = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return
+      const rect = el.getBoundingClientRect()
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top
+      const s = scaleRef.current
+      latest = s
+      start = {
+        dist: distOf(e.touches),
+        scale: s,
+        // Content point currently under the pinch midpoint (unscaled coords).
+        cx: (el.scrollLeft + mx) / s,
+        cy: (el.scrollTop + my) / s,
+      }
+    }
+
+    const onMove = (e: TouchEvent) => {
+      if (!start || e.touches.length !== 2) return
+      e.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left
+      const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top
+      const s = clampZoom(start.scale * (distOf(e.touches) / start.dist))
+      latest = s
+      const cs = canvasSizeRef.current
+      if (contentRef.current) {
+        contentRef.current.style.transform = `scale(${s})`
+      }
+      if (sizerRef.current) {
+        sizerRef.current.style.width = `${cs.width * s}px`
+        sizerRef.current.style.height = `${cs.height * s}px`
+      }
+      // Keep the pinched content point pinned under the current midpoint.
+      el.scrollLeft = start.cx * s - mx
+      el.scrollTop = start.cy * s - my
+    }
+
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length >= 2 || !start) return
+      start = null
+      scaleRef.current = latest
+      setScale(latest)
+    }
+
+    el.addEventListener("touchstart", onStart, { passive: false })
+    el.addEventListener("touchmove", onMove, { passive: false })
+    el.addEventListener("touchend", onEnd)
+    el.addEventListener("touchcancel", onEnd)
+    return () => {
+      el.removeEventListener("touchstart", onStart)
+      el.removeEventListener("touchmove", onMove)
+      el.removeEventListener("touchend", onEnd)
+      el.removeEventListener("touchcancel", onEnd)
+    }
   }, [])
 
   const guestsByTable = useMemo(() => {
@@ -521,6 +595,7 @@ export function Editor({
       height: maxY * CELL + NODE + 96,
     }
   }, [tables])
+  canvasSizeRef.current = canvasSize
 
   const sortedTables = useMemo(
     () =>
@@ -543,8 +618,12 @@ export function Editor({
     >
       <div className="flex flex-1 overflow-hidden">
         <div className="relative flex-1">
-          <div ref={scrollRef} className="absolute inset-0 overflow-auto">
+          <div
+            ref={scrollRef}
+            className="absolute inset-0 touch-pan-x touch-pan-y overflow-auto"
+          >
             <div
+              ref={sizerRef}
               style={{
                 width: canvasSize.width * scale,
                 height: canvasSize.height * scale,
@@ -553,6 +632,7 @@ export function Editor({
               }}
             >
               <div
+                ref={contentRef}
                 className="relative"
                 style={{
                   width: canvasSize.width,
@@ -601,10 +681,11 @@ export function Editor({
             </div>
           )}
 
-          <div className="absolute right-4 bottom-4 z-10 hidden items-center gap-1 rounded-lg border bg-card p-1 shadow-sm md:flex">
+          <div className="absolute top-4 right-4 z-10 flex items-center gap-0.5 rounded-xl border bg-card p-1.5 shadow-sm md:top-auto md:bottom-4 md:gap-1 md:rounded-lg md:p-1">
             <Button
               variant="ghost"
               size="icon-xs"
+              className="size-9 [&_svg]:size-5 md:size-7 md:[&_svg]:size-4"
               disabled={scale <= MIN_ZOOM}
               onClick={() => zoomTo(scale / 1.2)}
               title="Zoom out"
@@ -612,7 +693,7 @@ export function Editor({
               <Minus />
             </Button>
             <button
-              className="min-w-11 text-center text-xs text-muted-foreground tabular-nums hover:text-foreground"
+              className="min-w-12 text-center text-sm text-muted-foreground tabular-nums hover:text-foreground md:min-w-11 md:text-xs"
               onClick={() => zoomTo(1)}
               title="Reset zoom"
             >
@@ -621,6 +702,7 @@ export function Editor({
             <Button
               variant="ghost"
               size="icon-xs"
+              className="size-9 [&_svg]:size-5 md:size-7 md:[&_svg]:size-4"
               disabled={scale >= MAX_ZOOM}
               onClick={() => zoomTo(scale * 1.2)}
               title="Zoom in"
