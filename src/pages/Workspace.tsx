@@ -1,61 +1,64 @@
-import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "convex/react";
+import { useMemo, useState } from "react"
+import { Link, useParams } from "react-router-dom"
+import { useMutation, useQuery } from "convex/react"
 import {
   Check,
   Copy,
-  Eye,
   Link2,
   Loader2,
   Redo2,
   Settings2,
   Share2,
   Undo2,
-} from "lucide-react";
+} from "lucide-react"
 
-import { api } from "../../convex/_generated/api";
-import type { Doc } from "../../convex/_generated/dataModel";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { api } from "../../convex/_generated/api"
+import type { Doc } from "../../convex/_generated/dataModel"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { useHistory, useHistoryShortcuts } from "@/lib/history";
-import { usePresence, type Collaborator } from "@/lib/presence";
-import { ImportStep } from "@/features/ImportStep";
-import { CategorizeStep } from "@/features/CategorizeStep";
-import { Editor } from "@/features/editor/Editor";
+} from "@/components/ui/popover"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
+import { useHistory, useHistoryShortcuts } from "@/lib/history"
+import { usePresence, type Collaborator } from "@/lib/presence"
+import { ImportStep } from "@/features/ImportStep"
+import { CategorizeStep } from "@/features/CategorizeStep"
+import { Editor } from "@/features/editor/Editor"
 
-type Step = "import" | "categorize" | "editor";
+type Step = "import" | "categorize" | "editor"
 
 export function Workspace() {
-  const { code = "" } = useParams();
-  const project = useQuery(api.projects.getByCode, code ? { code } : "skip");
-  const tables = useQuery(api.tables.list, project ? { code } : "skip");
-  const guests = useQuery(api.guests.list, project ? { code } : "skip");
+  const { code = "" } = useParams()
+  const project = useQuery(api.projects.getByCode, code ? { code } : "skip")
+  const tables = useQuery(api.tables.list, project ? { code } : "skip")
+  const guests = useQuery(api.guests.list, project ? { code } : "skip")
 
-  const [stepOverride, setStepOverride] = useState<Step | null>(null);
-  const history = useHistory();
-  const presence = usePresence(code, !!project);
+  const [stepOverride, setStepOverride] = useState<Step | null>(null)
+  const history = useHistory()
+  const presence = usePresence(code, !!project)
 
   const derivedStep: Step = useMemo(() => {
-    if (!guests || guests.length === 0) return "import";
+    if (!guests || guests.length === 0) return "import"
     // While setting up, keep the user on categorize until everyone has a
     // category, so categorizing one person doesn't jump to seating.
-    if (guests.some((g) => !g.category)) return "categorize";
-    return "editor";
-  }, [guests]);
+    if (guests.some((g) => !g.category)) return "categorize"
+    return "editor"
+  }, [guests])
 
   // Once the editor is reached, pin it so later uncategorized additions from
   // the sidebar don't yank the user back into the categorize flow.
   // (Render-phase state adjustment, per React's "adjusting state when a prop
   // changes" pattern.)
   if (stepOverride === null && derivedStep === "editor") {
-    setStepOverride("editor");
+    setStepOverride("editor")
   }
 
   if (project === undefined) {
@@ -63,14 +66,16 @@ export function Workspace() {
       <div className="flex min-h-svh items-center justify-center">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
-    );
+    )
   }
 
   if (project === null) {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-3 px-6 text-center">
         <div className="text-3xl">❦</div>
-        <h1 className="text-lg font-medium">That code doesn't match anything</h1>
+        <h1 className="text-lg font-medium">
+          That code doesn't match anything
+        </h1>
         <p className="text-sm text-muted-foreground">
           Double-check the share code, or create a new chart.
         </p>
@@ -78,12 +83,12 @@ export function Workspace() {
           Back to start
         </Button>
       </div>
-    );
+    )
   }
 
-  const canEdit = project.canEdit;
-  const step: Step = canEdit ? (stepOverride ?? derivedStep) : "editor";
-  const loaded = tables !== undefined && guests !== undefined;
+  const canEdit = project.canEdit
+  const step: Step = canEdit ? (stepOverride ?? derivedStep) : "editor"
+  const loaded = tables !== undefined && guests !== undefined
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background">
@@ -125,7 +130,7 @@ export function Workspace() {
         />
       )}
     </div>
-  );
+  )
 }
 
 function WorkspaceHeader({
@@ -138,27 +143,27 @@ function WorkspaceHeader({
   hasGuests,
   collaborators,
 }: {
-  code: string;
+  code: string
   project: {
-    name: string;
-    canEdit: boolean;
-    viewCode: string;
-    editCode: string | null;
-  };
-  step: Step;
-  onStepChange: (step: Step) => void;
-  history: ReturnType<typeof useHistory>;
-  showHistory: boolean;
-  hasGuests: boolean;
-  collaborators: Collaborator[];
+    name: string
+    canEdit: boolean
+    viewCode: string
+    editCode: string | null
+  }
+  step: Step
+  onStepChange: (step: Step) => void
+  history: ReturnType<typeof useHistory>
+  showHistory: boolean
+  hasGuests: boolean
+  collaborators: Collaborator[]
 }) {
-  useHistoryShortcuts(history, showHistory);
+  useHistoryShortcuts(history, showHistory)
 
   const steps: {
-    key: Step;
-    label: string;
-    short: string;
-    disabled?: boolean;
+    key: Step
+    label: string
+    short: string
+    disabled?: boolean
   }[] = [
     { key: "import", label: "1 · Import", short: "Import" },
     {
@@ -167,8 +172,13 @@ function WorkspaceHeader({
       short: "Categorize",
       disabled: !hasGuests,
     },
-    { key: "editor", label: "3 · Seating", short: "Seating", disabled: !hasGuests },
-  ];
+    {
+      key: "editor",
+      label: "3 · Seating",
+      short: "Seating",
+      disabled: !hasGuests,
+    },
+  ]
 
   return (
     <header className="flex h-13 shrink-0 items-center gap-2 border-b bg-card/50 px-3 sm:gap-3 sm:px-4">
@@ -184,14 +194,12 @@ function WorkspaceHeader({
         {project.canEdit ? (
           <ProjectSettings code={code} name={project.name} />
         ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-            <Eye className="size-3" /> View only
-          </span>
+          <span />
         )}
       </div>
 
       {project.canEdit && (
-        <nav className="ml-4 hidden min-w-0 items-center gap-1 overflow-x-auto sm:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav className="ml-4 hidden min-w-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto sm:flex [&::-webkit-scrollbar]:hidden">
           {steps.map((s) => (
             <button
               key={s.key}
@@ -202,7 +210,7 @@ function WorkspaceHeader({
                 step === s.key
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                s.disabled && "pointer-events-none opacity-40",
+                s.disabled && "pointer-events-none opacity-40"
               )}
             >
               <span className="sm:hidden">{s.short}</span>
@@ -280,12 +288,12 @@ function WorkspaceHeader({
         <SharePopover project={project} />
       </div>
     </header>
-  );
+  )
 }
 
 function ProjectSettings({ code, name }: { code: string; name: string }) {
-  const updateSettings = useMutation(api.projects.updateSettings);
-  const [draft, setDraft] = useState(name);
+  const updateSettings = useMutation(api.projects.updateSettings)
+  const [draft, setDraft] = useState(name)
 
   return (
     <Popover>
@@ -305,7 +313,7 @@ function ProjectSettings({ code, name }: { code: string; name: string }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") void updateSettings({ code, name: draft });
+              if (e.key === "Enter") void updateSettings({ code, name: draft })
             }}
           />
           <Button
@@ -318,13 +326,13 @@ function ProjectSettings({ code, name }: { code: string; name: string }) {
         </div>
       </PopoverContent>
     </Popover>
-  );
+  )
 }
 
 function SharePopover({
   project,
 }: {
-  project: { canEdit: boolean; viewCode: string; editCode: string | null };
+  project: { canEdit: boolean; viewCode: string; editCode: string | null }
 }) {
   return (
     <Popover>
@@ -345,18 +353,18 @@ function SharePopover({
         )}
       </PopoverContent>
     </Popover>
-  );
+  )
 }
 
 function CodeRow({ label, code }: { label: string; code: string }) {
-  const [copied, setCopied] = useState<"code" | "link" | null>(null);
-  const link = `${window.location.origin}/p/${code}`;
+  const [copied, setCopied] = useState<"code" | "link" | null>(null)
+  const link = `${window.location.origin}/p/${code}`
 
   const copy = (kind: "code" | "link") => {
-    void navigator.clipboard.writeText(kind === "code" ? code : link);
-    setCopied(kind);
-    setTimeout(() => setCopied(null), 1500);
-  };
+    void navigator.clipboard.writeText(kind === "code" ? code : link)
+    setCopied(kind)
+    setTimeout(() => setCopied(null), 1500)
+  }
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2">
@@ -405,9 +413,9 @@ function CodeRow({ label, code }: { label: string; code: string }) {
         </Tooltip>
       </div>
     </div>
-  );
+  )
 }
 
-export type { Step };
-export type WorkspaceGuest = Doc<"guests">;
-export type WorkspaceTable = Doc<"tables">;
+export type { Step }
+export type WorkspaceGuest = Doc<"guests">
+export type WorkspaceTable = Doc<"tables">
