@@ -198,7 +198,7 @@ function WorkspaceHeader({
         )}
       </div>
 
-      {project.canEdit && (
+      {project.canEdit && step !== "editor" && (
         <nav className="ml-4 hidden min-w-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto sm:flex [&::-webkit-scrollbar]:hidden">
           {steps.map((s) => (
             <button
