@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery } from "convex/react"
 import {
   Check,
@@ -292,14 +292,32 @@ function WorkspaceHeader({
 }
 
 function ProjectSettings({ code, name }: { code: string; name: string }) {
+  const navigate = useNavigate()
   const updateSettings = useMutation(api.projects.updateSettings)
+  const duplicateProject = useMutation(api.projects.duplicate)
   const [draft, setDraft] = useState(name)
+  const [duplicating, setDuplicating] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+
+  const handleDuplicate = async () => {
+    setDuplicateError(null)
+    setDuplicating(true)
+    try {
+      const { editCode } = await duplicateProject({ code })
+      navigate(`/p/${editCode}`)
+    } catch (e) {
+      setDuplicateError(
+        e instanceof Error ? e.message : "Failed to duplicate project"
+      )
+      setDuplicating(false)
+    }
+  }
 
   return (
     <Popover>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon-xs" title="Rename project" />
+          <Button variant="ghost" size="icon-xs" title="Project settings" />
         }
       >
         <Settings2 />
@@ -323,6 +341,27 @@ function ProjectSettings({ code, name }: { code: string; name: string }) {
           >
             Save
           </Button>
+        </div>
+        <div className="mt-3 border-t border-border pt-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={duplicating}
+            onClick={() => void handleDuplicate()}
+          >
+            {duplicating ? (
+              <>
+                <Loader2 className="animate-spin" />
+                Duplicating…
+              </>
+            ) : (
+              "Duplicate project"
+            )}
+          </Button>
+          {duplicateError && (
+            <p className="mt-1.5 text-xs text-destructive">{duplicateError}</p>
+          )}
         </div>
       </PopoverContent>
     </Popover>
