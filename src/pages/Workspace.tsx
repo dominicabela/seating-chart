@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery } from "convex/react"
 import {
@@ -29,6 +29,10 @@ import {
 import { cn } from "@/lib/utils"
 import { useHistory, useHistoryShortcuts } from "@/lib/history"
 import { usePresence, type Collaborator } from "@/lib/presence"
+import {
+  forgetRecentProject,
+  rememberRecentProject,
+} from "@/lib/recent-projects"
 import { ImportStep } from "@/features/ImportStep"
 import { CategorizeStep } from "@/features/CategorizeStep"
 import { Editor } from "@/features/editor/Editor"
@@ -44,6 +48,18 @@ export function Workspace() {
   const [stepOverride, setStepOverride] = useState<Step | null>(null)
   const history = useHistory()
   const presence = usePresence(code, !!project)
+
+  useEffect(() => {
+    if (project) {
+      rememberRecentProject({
+        code: code.toUpperCase(),
+        name: project.name,
+        canEdit: project.canEdit,
+      })
+    } else if (project === null) {
+      forgetRecentProject(code.toUpperCase())
+    }
+  }, [code, project])
 
   const derivedStep: Step = useMemo(() => {
     if (!guests || guests.length === 0) return "import"

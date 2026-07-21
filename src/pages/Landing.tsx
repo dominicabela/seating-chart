@@ -1,11 +1,15 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation } from "convex/react"
-import { ArrowRight, Loader2 } from "lucide-react"
+import { ArrowRight, Clock3, Loader2, X } from "lucide-react"
 
 import { api } from "../../convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  forgetRecentProject,
+  getRecentProjects,
+} from "@/lib/recent-projects"
 
 export function Landing() {
   const navigate = useNavigate()
@@ -17,6 +21,7 @@ export function Landing() {
   const [creating, setCreating] = useState(false)
   const [openCode, setOpenCode] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [recent, setRecent] = useState(getRecentProjects)
 
   const handleCreate = async () => {
     setError(null)
@@ -123,6 +128,51 @@ export function Landing() {
               Open
             </Button>
           </div>
+
+          {recent.length > 0 && (
+            <div className="mt-5 border-t pt-4">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Clock3 className="size-3.5" />
+                Recently opened
+              </div>
+              <ul className="-mx-2 flex flex-col">
+                {recent.map((project) => (
+                  <li
+                    key={project.code}
+                    className="group flex items-center rounded-lg hover:bg-muted/60"
+                  >
+                    <button
+                      className="min-w-0 flex-1 px-2 py-2 text-left"
+                      onClick={() => navigate(`/p/${project.code}`)}
+                    >
+                      <span className="block truncate text-sm font-medium">
+                        {project.name}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {project.canEdit ? "Can edit" : "View only"} ·{" "}
+                        {project.code}
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="mr-1 opacity-60 sm:opacity-0 sm:group-hover:opacity-100"
+                      onClick={() => {
+                        forgetRecentProject(project.code)
+                        setRecent((items) =>
+                          items.filter((item) => item.code !== project.code)
+                        )
+                      }}
+                      aria-label={`Remove ${project.name} from recent charts`}
+                      title="Remove from recents"
+                    >
+                      <X />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>

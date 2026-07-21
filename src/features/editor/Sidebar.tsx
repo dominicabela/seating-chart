@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useDraggable, useDroppable } from "@dnd-kit/core"
-import { GripVertical, Plus, Search, Sparkles, X } from "lucide-react"
+import { Download, GripVertical, Plus, Search, Sparkles, X } from "lucide-react"
 
 import type { Doc, Id } from "../../../convex/_generated/dataModel"
 import { Button } from "@/components/ui/button"
@@ -36,6 +36,8 @@ const ALL = "__all__"
 const UNCATEGORIZED = "__uncategorized__"
 
 type SortBy = "name" | "category" | "table"
+type ExportFormat = "csv" | "txt"
+type ExportOrder = "name" | "table"
 
 const CATEGORY_ORDER = new Map<string, number>(
   CATEGORIES.map((c, i) => [c.value, i])
@@ -68,6 +70,7 @@ export function Sidebar({
   const [sortBy, setSortBy] = useState<SortBy>("name")
   const [showAdd, setShowAdd] = useState(false)
   const [confirmAutoSeat, setConfirmAutoSeat] = useState(false)
+  const [showExport, setShowExport] = useState(false)
 
   const { setNodeRef, isOver } = useDroppable({
     id: "unassign",
@@ -166,6 +169,16 @@ export function Sidebar({
             <span className="text-xs text-muted-foreground">
               {seatedCount} of {guests.length} seated
             </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              disabled={guests.length === 0}
+              onClick={() => setShowExport(true)}
+              aria-label="Export guest list"
+              title="Export guest list"
+            >
+              <Download className="size-4" />
+            </Button>
             {onClose && (
               <Button
                 variant="ghost"
@@ -348,8 +361,172 @@ export function Sidebar({
           </DialogContent>
         </Dialog>
       )}
+
+      {showExport && (
+        <ExportDialog
+          guests={guests}
+          tableLabels={tableLabels}
+          onClose={() => setShowExport(false)}
+        />
+      )}
     </aside>
   )
+}
+
+function ExportDialog({
+  guests,
+  tableLabels,
+  onClose,
+}: {
+  guests: Guest[]
+  tableLabels: Map<Id<"tables">, string>
+  onClose: () => void
+}) {
+  const [format, setFormat] = useState<ExportFormat>("csv")
+  const formatItems = [
+    { value: "csv", label: "CSV spreadsheet" },
+    { value: "txt", label: "Plain text (.txt)" },
+  ]
+
+  const exportGuests = (order: ExportOrder) => {
+    if (format === "csv") downloadGuestCsv(guests, tableLabels, order)
+    else downloadGuestTxt(guests, tableLabels, order)
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Export guest list</DialogTitle>
+          <DialogDescription>
+            Choose a file format and how guests should be ordered.
+          </DialogDescription>
+        </DialogHeader>
+        <Select
+          items={formatItems}
+          value={format}
+          onValueChange={(value) => setFormat(value as ExportFormat)}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {formatItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="grid gap-2">
+          <Button
+            variant="outline"
+            className="h-auto justify-start px-4 py-3 text-left"
+            onClick={() => exportGuests("name")}
+          >
+            <span>
+              <span className="block font-medium">By last name</span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                One alphabetical guest list
+              </span>
+            </span>
+          </Button>
+          <Button
+            variant="outline"
+            className="h-auto justify-start px-4 py-3 text-left"
+            onClick={() => exportGuests("table")}
+          >
+            <span>
+              <span className="block font-medium">Group by table</span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                Tables in order, then guests by last name
+              </span>
+            </span>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function downloadGuestCsv(
+  guests: Guest[],
+  tableLabels: Map<Id<"tables">, string>,
+  order: ExportOrder
+) {
+  const rows = guestExportRows(guests, tableLabels, order)
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`
+  downloadFile(
+    csv,
+    "text/csv;charset=utf-8",
+    `guest-list-${order === "name" ? "by-last-name" : "by-table"}.csv`
+  )
+}
+
+function downloadGuestTxt(
+  guests: Guest[],
+  tableLabels: Map<Id<"tables">, string>,
+  order: ExportOrder
+) {
+  const text = guestExportRows(guests, tableLabels, order)
+    .map((row) => row.map(txtCell).join("\t"))
+    .join("\r\n")
+  downloadFile(
+    `\uFEFF${text}`,
+    "text/plain;charset=utf-8",
+    `guest-list-${order === "name" ? "by-last-name" : "by-table"}.txt`
+  )
+}
+
+function guestExportRows(
+  guests: Guest[],
+  tableLabels: Map<Id<"tables">, string>,
+  order: ExportOrder
+) {
+  const byName = (a: Guest, b: Guest) =>
+    `${a.lastName} ${a.firstName}`.localeCompare(
+      `${b.lastName} ${b.firstName}`
+    )
+  const sorted = [...guests].sort((a, b) => {
+    if (order === "table") {
+      const aTable = a.tableId ? (tableLabels.get(a.tableId) ?? "") : null
+      const bTable = b.tableId ? (tableLabels.get(b.tableId) ?? "") : null
+      if (aTable === null && bTable !== null) return 1
+      if (aTable !== null && bTable === null) return -1
+      if (aTable !== null && bTable !== null && aTable !== bTable) {
+        return aTable.localeCompare(bTable, undefined, { numeric: true })
+      }
+    }
+    return byName(a, b)
+  })
+
+  return [
+    ["Name", "Table"],
+    ...sorted.map((guest) => [
+      `${guest.firstName} ${guest.lastName}`.trim(),
+      guest.tableId ? (tableLabels.get(guest.tableId) ?? "Unknown table") : "Unseated",
+    ]),
+  ]
+}
+
+function downloadFile(contents: string, type: string, filename: string) {
+  const url = URL.createObjectURL(new Blob([contents], { type }))
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function csvCell(value: string) {
+  // Prevent spreadsheet apps from interpreting user-entered text as formulas.
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value
+  return `"${safe.replaceAll('"', '""')}"`
+}
+
+function txtCell(value: string) {
+  return value.replace(/[\t\r\n]+/g, " ")
 }
 
 function GuestRow({
